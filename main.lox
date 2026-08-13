@@ -1,0 +1,23 @@
+class AddressingMode {
+  const IMPLIED = "IMPLIED";
+  const ACCUMULATOR = "ACCUMULATOR";
+  const IMMEDIATE = "IMMEDIATE"; // #$ff
+  const ABSOLUTE = "ABSOLUTE"; // $0800 or label (pass 2 picks zp vs abs)
+  const ABSOLUTE_X = "ABSOLUTE_X"; // $0800,x
+  const ABSOLUTE_Y = "ABSOLUTE_Y"; // $0800,y
+  const INDIRECT = "INDIRECT"; // ($a000)
+  const IND_X = "IND_X"; // ($02,x)
+  const IND_Y = "IND_Y"; // ($02),y
+}
+
+class Statement {
+  init(type, label, name, mode, operand) {
+    this.type = type;   // "INSTRUCTION", "DIRECTIVE", "ORIGIN"
+    this.label = label; // "loop" or nil
+    this.name = name;   // "LDA", ".byte", etc
+    this.mode = mode;   // AddressingMode constant
+    this.operand = operand; // raw expression / value / symbol
+  }
+}
+
+
