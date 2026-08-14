@@ -1,11 +1,22 @@
 require("mode.lox");
 
 class AssemblyParser {
+  const branchOpcodes = ["BNE", "BEQ", "BCC", "BCS", "BPL", "BMI", "BVC", "BVS"];
+
   init(tokens) {
     this.tokens = tokens;
     this.current = 0;
   }
 
+  isBranch(mnemonic) {
+    for (var i = 0; i < this.branchOpcodes.length(); i += 1) {
+      if (this.branchOpcodes[i] == mnemonic) return true;
+    }
+
+    return false;
+  }
+
+  /*
   parseOperand() {
     // 1. implied / accumulator check (no tokens left or register A)
     if (this.isAtEnd()) {
@@ -62,6 +73,7 @@ class AssemblyParser {
     // plain absolute /zer page (pas 1/2 resolves size based on numeric value)
     return Statement("INSTRUCTION", nil, name, AddressingMode, ABSOLUTE, expr);
   }
+  */
 
   parse() {
     var statements = [];
@@ -131,7 +143,7 @@ class AssemblyParser {
     // 5. parse operand & disambiguate addressing mode
     var rem = lineTokens.length() - idx;
 
-    // implide mode (RTS, NOP)
+    // implied mode (RTS, NOP)
     if (rem == 0) {
       return Statement(stmtType, label, name, AddressingMode.IMPLIED, nil, lineNum);
     }
@@ -182,8 +194,11 @@ class AssemblyParser {
       }
     }
 
+    // check for relative branch instructions before defaulting to absolute
+    var mode = (this.isBranch(name)) ? AddressingMode.RELATIVE : AddressingMode.ABSOLUTE;
+
     // default to absolute (pass 1/2 will downgrade to ZERO_PAGE if target <= 255)
-    return Statement(stmtType, label, name, AddressingMode.ABSOLUTE, target, lineNum);
+    return Statement(stmtType, label, name, mode, target, lineNum);
   }
 
   peek() {

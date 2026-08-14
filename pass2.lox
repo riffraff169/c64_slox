@@ -1,0 +1,130 @@
+class Pass2 {
+  init(statements, symbolTable, opcodes) {
+    this.statements = statements;
+    this.symbolTable = symbolTable;
+    this.opcodes = opcodes;
+    this.bytes = [];
+  }
+
+  run() {
+    for (var i = 0; i < this.statements.length(); i += 1) {
+      var stmt = this.statements[i];
+
+      if (stmt.type == "INSTRUCTION") {
+        this.assembleInstruction(stmt);
+      } else if (stmt.type == "DIRECTIVE") {
+        this.assembleDirective(stmt);
+      }
+      // "ORIGIN" and "LABEL_ONLY" emit no output bytes directly
+    }
+    return this.bytes;
+  }
+
+  assembleInstruction(stmt) {
+    var mnemonic = stmt.name;
+    var mode = stmt.mode;
+
+    // 1. look up opcode byte
+    if (!this.opcodes.has(mnemonic) or !this.opcodes[mnemonic].has(mode)) {
+      print "Error on line " + stmt.line + ": Invalid instruction or mode (" + mnemonic + " " + mode + ")";
+      return;
+    }
+
+    var opcodeObj = this.opcodes[mnemonic][mode];
+    this.emitByte(opcodeObj.code);
+
+    // implied & accumulator modes emit no operand bytes
+    if (mode == AddressingMode.IMPLIED or mode == AddressingMode.ACCUMULATOR) {
+      return;
+    }
+
+    // 2. resolve operand value
+    var val = this.resolveOperand(stmt.operand, stmt.line);
+    if (val == nil) return;
+
+    // 3. emit operand bytes base on mode
+    if (mode == AddressingMode.RELATIVE) {
+      // relative branch offset calculation: target_address - (current_pc + 2)
+      var offset = val - (stmt.pc + 2);
+
+      if (offset < -128 or offset > 127) {
+        print "Error on line " + stmt.line + ": Branch out of range (" + offset + " bytes)";
+        return;
+      }
+
+      // convert negative offset to 8-bit two's complement
+      if (offset < 0) {
+        offset += 256;
+      }
+
+      this.emitByte(offset);
+    } else if (mode == AddressingMode.IMMEDIATE or
+        mode == AddressingMode.ZERO_PAGE or
+        mode == AddressingMode.ZERO_PAGE_X or
+        mode == AddressingMode.ZERO_PAGE_Y or
+        mode == AddressingMode.IND_X or
+        mode == AddressingMode.IND_Y) {
+      this.emitByte(val);
+    } else if (mode == AddressingMode.ABSOLUTE or
+        mode == AddressingMode.ABSOLUTE_X or
+        mode == AddressingMode.ABSOLUTE_Y or
+        mode == AddressingMode.INDIRECT) {
+      // 16-bit address (little-endian: low byte, high byte)
+      this.emitWord(val);
+    }
+  }
+
+  assembleDirective(stmt) {
+    if (stmt.name == ".byte") {
+      if (typeof(stmt.operand) == "Array") {
+        for (var i = 0; i < stmt.operand.length(); i += 1) {
+          var val = this.resolveOperand(stmt.operand[i], stmt.line);
+          this.emitByte(val);
+        }
+      } else {
+        var val = this.resolveOperand(stmt.operand, stmt.line);
+        this.emitByte(val);
+      }
+    } else if (stmt.name == ".word") {
+      if (typeof(stmt.operand) == "Array") {
+        for (var i = 0; i < stmt.operand.length(); i += 1) {
+          var val = this.resolveOperand(stmt.operand[i], stmt.line);
+          this.emitWOrd(val);
+        }
+      } else {
+        var val = this.resolveOperand(stmt.operand, stmt.line);
+        this.emitWord(val);
+      }
+    } else if (stmt.name == ".text" or stmt.name == ".string") {
+      var str = stmt.operand;
+      for (var i = 0; i < str.length(); i += 1) {
+        // convert char string to byte index
+        this.emitByte(str[i]);
+      }
+    }
+  }
+
+  resolveOperand(op, line) {
+    if (isnumber(op)) {
+      return op;
+    }
+    // look up symbol in pass 1 table
+    if (this.symbolTable.has(op)) {
+      return this.symbolTable[op];
+    }
+
+    print "Error on line " + line + ": Undefined symbol '" + op + "'";
+    return nil;
+  }
+
+  emitByte(b) {
+    this.bytes.push(b % 256);
+  }
+
+  emitWord(w) {
+    var lowByte = w % 256;
+    var highByte = ((w / 256) % 256).floor();
+    this.bytes.push(lowByte);
+    this.bytes.push(highByte);
+  }
+}
