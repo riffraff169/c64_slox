@@ -1,0 +1,37 @@
+require("scanner.lox");
+require("c64_parser.lox");
+require("opcodes.lox"); // Contains OPCODES table
+require("pass1.lox");
+
+var source = "* = $0801\n" +
+             "main:\n" +
+             "  LDA #$00\n" +
+             "  STA $D020\n" +
+             "loop:\n" +
+             "  INC $D020\n" +
+             "  JMP loop\n" +
+             "  RTS\n";
+
+var scanner = AssemblyScanner(source);
+var tokens = scanner.scanTokens();
+
+var parser = AssemblyParser(tokens);
+var statements = parser.parse();
+
+var pass1 = Pass1(statements, OPCODES);
+var result = pass1.run();
+
+print "=== SYMBOL TABLE ===";
+var symbols = result["symbolTable"];
+symbols.keys().each(fun(key) {
+  print key + " -> $" + symbols[key]; // Helper to display hex address
+});
+
+
+print "\n=== STATEMENT PC LAYOUT ===";
+for (var i = 0; i < result["statements"].length(); i += 1) {
+  var s = result["statements"][i];
+  print "$" + s.pc + " [" + s.size + "B] " + s;
+}
+
+print result["statements"][0];

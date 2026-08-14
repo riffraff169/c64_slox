@@ -123,7 +123,7 @@ class Pass2 {
 
   emitWord(w) {
     var lowByte = w % 256;
-    var highByte = ((w / 256) % 256).floor();
+    var highByte = (w / 256).floor() % 256;
     this.bytes.push(lowByte);
     this.bytes.push(highByte);
   }

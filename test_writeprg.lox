@@ -1,0 +1,46 @@
+require("scanner.lox");
+require("c64_parser.lox");
+require("opcodes.lox");
+require("pass1.lox");
+require("pass2.lox");
+require("prg_writer.lox");
+
+/*
+var source = "* = $0801\n" +
+             "main:\n" +
+             "  LDA #$00\n" +
+             "  STA $D020\n" +
+             "loop:\n" +
+             "  INC $D020\n" +
+             "  BNE loop\n" +
+             "  RTS\n";
+             */
+
+var source = "* = $0801\n" +
+  "loop:\n" +
+  "  INC $d020\n" +
+  "wait_frame:\n" +
+  "  LDA $d012\n" +
+  "  CMP #$ff\n" +
+  "  BNE wait_frame\n" +
+  "  LDA $d020\n" +
+  "  BNE loop\n" +
+  "  RTS\n";
+
+var scanner = AssemblyScanner(source);
+var parser = AssemblyParser(scanner.scanTokens());
+var pass1 = Pass1(parser.parse(), OPCODES);
+var pass1Result = pass1.run();
+
+var pass2 = Pass2(pass1Result["statements"], pass1Result["symbolTable"], OPCODES);
+var assembledBytes = pass2.run();
+
+// Extract origin PC set in Pass 1 (* = $0801)
+var startAddress = pass1Result["startAddress"] ?? 2049;
+
+var writer = PRGWriter("test.prg");
+if (writer.save(assembledBytes, startAddress)) {
+  print "Successfully wrote test.prg (" + (assembledBytes.length() + 2) + " bytes total)";
+} else {
+  print "Failed to write file.";
+}

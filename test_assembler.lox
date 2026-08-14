@@ -1,0 +1,56 @@
+require("scanner.lox");
+require("c64_parser.lox");
+require("opcodes.lox");
+require("pass1.lox");
+require("pass2.lox");
+
+var source = "* = $0801\n" +
+             "main:\n" +
+             "  LDA #$00\n" +
+             "  STA $D020\n" +
+             "loop:\n" +
+             "  INC $D020\n" +
+             "  BNE loop\n" +
+             "  RTS\n";
+
+var scanner = AssemblyScanner(source);
+var tokens = scanner.scanTokens();
+
+var parser = AssemblyParser(tokens);
+var statements = parser.parse();
+
+var pass1 = Pass1(statements, OPCODES);
+var pass1Result = pass1.run();
+
+var pass2 = Pass2(pass1Result["statements"], pass1Result["symbolTable"], OPCODES);
+var assembledBytes = pass2.run();
+
+print "=== ASSEMBLED BYTES (" + assembledBytes.length() + " bytes) ===";
+
+var digits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"];
+var hexString = "";
+for (var i = 0; i < assembledBytes.length(); i += 1) {
+  var b = assembledBytes[i];
+  var h1 = ((b / 16) % 16).floor();
+  var h0 = b % 16;
+  hexString = hexString + digits[Number(h1)] + digits[Number(h0)] + " ";
+}
+print hexString;
+
+__END__
+Expected Output for Test Program:
+Plaintext
+
+=== ASSEMBLED BYTES (12 bytes) ===
+A9 00 8D 20 D0 EE 20 D0 D0 FB 60
+
+    A9 00 → LDA #$00
+
+    8D 20 D0 → STA $D020
+
+    EE 20 D0 → INC $D020
+
+    D0 F9 → BNE loop (Branch offset −5 = $FB, jumps back to loop at $0806)
+
+    60 → RTS
+

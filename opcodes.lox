@@ -96,5 +96,34 @@ var OPCODES = {
   "PHP": { AddressingMode.IMPLIED: Opcode(0x08, 1) },
   "PLP": { AddressingMode.IMPLIED: Opcode(0x28, 1) },
   "CLC": { AddressingMode.IMPLIED: Opcode(0x18, 1) },
-  "SEC": { AddressingMode.IMPLIED: Opcode(0x38, 1) }
+  "SEC": { AddressingMode.IMPLIED: Opcode(0x38, 1) },
+
+  // SEI - Set Interrupt Disable
+  "SEI": { AddressingMode.IMPLIED: Opcode(0x78, 1) },
+
+  // CMP - Compare Accumulator
+  "CMP": {
+    AddressingMode.IMMEDIATE:   Opcode(0xC9, 2),
+    AddressingMode.ZERO_PAGE:   Opcode(0xC5, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0xD5, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0xCD, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0xDD, 3),
+    AddressingMode.ABSOLUTE_Y:  Opcode(0xD9, 3),
+    AddressingMode.IND_X:       Opcode(0xC1, 2),
+    AddressingMode.IND_Y:       Opcode(0xD1, 2)
+  },
+
+  // CPX - Compare X Register
+  "CPX": {
+    AddressingMode.IMMEDIATE: Opcode(0xE0, 2),
+    AddressingMode.ZERO_PAGE: Opcode(0xE4, 2),
+    AddressingMode.ABSOLUTE:  Opcode(0xEC, 3)
+  },
+
+  // CPY - Compare Y Register
+  "CPY": {
+    AddressingMode.IMMEDIATE: Opcode(0xC0, 2),
+    AddressingMode.ZERO_PAGE: Opcode(0xC4, 2),
+    AddressingMode.ABSOLUTE:  Opcode(0xCC, 3)
+  }
 };

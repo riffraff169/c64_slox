@@ -1,0 +1,24 @@
+class PRGWriter {
+  init(filename) {
+    this.filename = filename;
+  }
+
+  save(assembledBytes, startAddress = 2049) {
+    var prgBytes = [];
+
+    // 1. generate 2-byte little-endian load header
+    var lowByte = startAddress % 256;
+    var highByte = (startAddress / 256).floor() % 256;
+
+    prgBytes.push(lowByte);
+    prgBytes.push(highByte);
+
+    // 2. append assembled payload
+    prgBytes.push(*assembledBytes);
+    print prgBytes;
+
+    // 3. write binary array to disk
+    var res = File.save(this.filename, prgBytes.to_string());
+    return res;
+  }
+}
