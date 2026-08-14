@@ -1,0 +1,19 @@
+require("scanner.lox");
+
+// Load external source file
+var source = File.load("sample.a64");
+
+// Run lexer
+var scanner = AssemblyScanner(source);
+var tokens = scanner.scanTokens();
+
+// Dump token stream
+print "=== TOKEN STREAM ===";
+for (var i = 0; i < tokens.length(); i = i + 1) {
+  var t = tokens[i];
+  if (t.type != TokenType.NEWLINE) {
+    print t;
+  } else {
+    print "--- EOL ---";
+  }
+}
