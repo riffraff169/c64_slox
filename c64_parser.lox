@@ -10,70 +10,11 @@ class AssemblyParser {
 
   isBranch(mnemonic) {
     for (var i = 0; i < this.branchOpcodes.length(); i += 1) {
-      if (this.branchOpcodes[i] == mnemonic) return true;
+      if (this.branchOpcodes[i] == mnemonic.to_upper()) return true;
     }
 
     return false;
   }
-
-  /*
-  parseOperand() {
-    // 1. implied / accumulator check (no tokens left or register A)
-    if (this.isAtEnd()) {
-      return Statement("INSTRUCTION", nil, name, AddressingMode.IMPLIED, nil);
-    }
-
-    if (this.check("IDENTIFIER")) { // and this.peek().lexeme == "A")
-      this.advance();
-      return Statement("INSTRUCTION", nil, name, AddressingMode.ACCUMULATOR, "A");
-    }
-
-    // 2. immediate: #value
-    if (this.match("HASH")) {
-      var expr = this.parseExpression();
-      return Statement("INSTRUCTION", nil, name, AddressingMode.IMMEDIATE, expr);
-    }
-
-    // 3. indirect modes starting with '('
-    if (this.patch("LPAREN")) {
-      var expr = this.parseExpression();
-
-      // index indirect; ($02,x)
-      if (this.match("COMMA")) {
-        this.consumeRegister("X");
-        this.consume("RPAREN");
-        return Statement("INSTRUCTION", nil, name, AddressingMode.IND_X, expr);
-      }
-
-      this.consume("RPAREN");
-
-      // indirect indexed: ($02),y
-      if (this.match("COMMA")) {
-        this.consumeRegister("Y");
-        return Statement("INSTRUCTION", nil, name, AddressingMode.IND_Y, expr);
-      }
-
-      // plain indirect: jmp ($a000)
-      return Statement("INSTRUCTION", nil, name, AddressingMode.INDIRECT, expr);
-    }
-
-    // 4. absolute /zero page (with option ,x or ,y);
-    var expr = this.parseExpression();
-
-    if (this.match("COMMA")) {
-      if (this.checkRegister("X")) {
-        this.advance();
-        return Statement("INSTRUCTION", nil, name, AddressingMode, ABSOLUTE_X, expr);
-      } else if (this.checkRegister("Y")) {
-        this.advance();
-        return Statement("INSTRUCTION", nil, name, AddressingMode, ABSOLUTE_Y, expr);
-      }
-    }
-
-    // plain absolute /zer page (pas 1/2 resolves size based on numeric value)
-    return Statement("INSTRUCTION", nil, name, AddressingMode, ABSOLUTE, expr);
-  }
-  */
 
   parse() {
     var statements = [];
@@ -130,9 +71,13 @@ class AssemblyParser {
       return Statement("LABEL_ONLY", label, "NOP", nil, nil, lineNum);
     }
 
+    if (lineTokens[idx].type == TokenType.DIRECTIVE) {
+      return this.parseDirective(lineTokens, idx, label, lineNum);
+    }
+
     // 4. extract mnemonic / directive
     var nameToken = lineTokens[idx];
-    var name = nameToken.lexeme;
+    var name = nameToken.lexeme.to_upper();
     idx += 1;
 
     var stmtType = "INSTRUCTION";
@@ -199,6 +144,44 @@ class AssemblyParser {
 
     // default to absolute (pass 1/2 will downgrade to ZERO_PAGE if target <= 255)
     return Statement(stmtType, label, name, mode, target, lineNum);
+  }
+
+  parseDirective(lineTokens, startIdx, label, lineNum) {
+    var dirToken = lineTokens[startIdx];
+    var dirName = dirToken.lexeme.to_upper();
+    var idx = startIdx + 1;
+
+    if (dirName == ".BASIC") {
+      // 12 byte SYS 2061 ($080d) BASIC header
+      var basicBytes = [0x0b, 0x08, 0x0a, 0x00, 0x9e, 0x20, 0x32, 0x30, 0x36, 0x32, 0x00, 0x00, 0x00];
+      return Statement("DIRECTIVE", label, dirName, nil, basicBytes, lineNum);
+    }
+    
+    if (dirName == ".BYTE") {
+      var byteValues = [];
+      while (idx < lineTokens.length()) {
+        var t = lineTokens[idx];
+        if (isnumber(t.literal)) {
+          byteValues.push(t.literal ?? t.lexeme);
+        }
+        idx += 1;
+      }
+      return Statement("DIRECTIVE", label, dirName, nil, byteValues, lineNum);
+    }
+
+    if (dirName == ".WORD") {
+      var wordValues = [];
+      while (idx < lineTokens.length()) {
+        var t = lineTokens[idx];
+        if (isnumber(t.literal)) {
+          wordValues.push(t.literal ?? t.lexeme);
+        }
+        idx += 1;
+      }
+      return Statement("DIRECTIVE", label, dirName, nil, wordValues, lineNum);
+    }
+
+    return nil;
   }
 
   peek() {

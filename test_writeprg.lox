@@ -16,9 +16,10 @@ var source = "* = $0801\n" +
              "  RTS\n";
              */
 
+/*
 var source = "* = $0801\n" +
   "loop:\n" +
-  "  INC $d020\n" +
+  "  inc $d020\n" +
   "wait_frame:\n" +
   "  LDA $d012\n" +
   "  CMP #$ff\n" +
@@ -26,6 +27,8 @@ var source = "* = $0801\n" +
   "  LDA $d020\n" +
   "  BNE loop\n" +
   "  RTS\n";
+*/
+var source = File.load("rainbow_bars.a64");
 
 var scanner = AssemblyScanner(source);
 var parser = AssemblyParser(scanner.scanTokens());

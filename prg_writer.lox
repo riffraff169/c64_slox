@@ -15,7 +15,7 @@ class PRGWriter {
 
     // 2. append assembled payload
     prgBytes.push(*assembledBytes);
-    print prgBytes;
+    //print prgBytes;
 
     // 3. write binary array to disk
     var res = File.save(this.filename, prgBytes.to_string());

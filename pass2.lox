@@ -75,33 +75,32 @@ class Pass2 {
   }
 
   assembleDirective(stmt) {
-    if (stmt.name == ".byte") {
+    var name = stmt.name.to_upper();
+
+    if (name == ".BYTE" or name == ".BASIC") {
       if (typeof(stmt.operand) == "Array") {
-        for (var i = 0; i < stmt.operand.length(); i += 1) {
-          var val = this.resolveOperand(stmt.operand[i], stmt.line);
-          this.emitByte(val);
-        }
+        this.bytes = this.bytes + stmt.operand;
       } else {
         var val = this.resolveOperand(stmt.operand, stmt.line);
         this.emitByte(val);
       }
-    } else if (stmt.name == ".word") {
+    } else if (name == ".WORD") {
       if (typeof(stmt.operand) == "Array") {
         for (var i = 0; i < stmt.operand.length(); i += 1) {
           var val = this.resolveOperand(stmt.operand[i], stmt.line);
-          this.emitWOrd(val);
+          this.emitWord(val);
         }
       } else {
         var val = this.resolveOperand(stmt.operand, stmt.line);
         this.emitWord(val);
       }
-    } else if (stmt.name == ".text" or stmt.name == ".string") {
+    } else if (stmt.name.to_upper() == ".TEXT" or stmt.name.to_upper() == ".STRING") {
       var str = stmt.operand;
       for (var i = 0; i < str.length(); i += 1) {
         // convert char string to byte index
         this.emitByte(str[i]);
       }
-    }
+    } 
   }
 
   resolveOperand(op, line) {
