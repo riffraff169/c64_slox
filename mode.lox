@@ -1,16 +1,17 @@
 class AddressingMode {
   const IMPLIED = "IMPLIED";
-  const ZERO_PAGE = "ZERO_PAGE";
-  const ZERO_PAGE_X = "ZERO_PAGE_x";
   const ACCUMULATOR = "ACCUMULATOR";
-  const RELATIVE = "RELATIVE";
   const IMMEDIATE = "IMMEDIATE"; // #$ff
+  const ZERO_PAGE = "ZERO_PAGE";
+  const ZERO_PAGE_X = "ZERO_PAGE_X";
+  const ZERO_PAGE_Y = "ZERO_PAGE_Y";
   const ABSOLUTE = "ABSOLUTE"; // $0800 or label (pass 2 picks zp vs abs)
   const ABSOLUTE_X = "ABSOLUTE_X"; // $0800,x
   const ABSOLUTE_Y = "ABSOLUTE_Y"; // $0800,y
   const INDIRECT = "INDIRECT"; // ($a000)
   const IND_X = "IND_X"; // ($02,x)
   const IND_Y = "IND_Y"; // ($02),y
+  const RELATIVE = "RELATIVE";
 }
 
 class Statement {

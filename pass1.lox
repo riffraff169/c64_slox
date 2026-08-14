@@ -1,0 +1,115 @@
+class Pass1 {
+  init(statements, opcodes) {
+    this.statements = statements;
+    this.opcodes = opcodes;
+    this.symbolTable = {};
+    this.currentPC = 0x0801;
+  }
+
+  run() {
+    for (var i = 0; i < this.statements.length(); i += 1) {
+      var stmt = this.statements[i];
+
+      // 1. record label if present on the line
+      if (stmt.label) {
+        if (this.symbolTable.has(stmt.label)) {
+          print "Error on line " + stmt.line + ": Duplicate label '" + stmt.label + "'";
+        } else {
+          this.symbolTable[stmt.label] = this.currentPC;
+        }
+      }
+
+      // attach current pc to the statement node for pass 2 lookup
+      stmt.pc = this.currentPC;
+
+      // 2. calculate byte size and advance the pc
+      if (stmt.type == "ORIGIN") {
+        this.currentPC = stmt.operand;
+        stmt.pc = this.currentPC;
+        stmt.size = 0;
+      } else if (stmt.type == "INSTRUCTION") {
+        var size = this.calculateInstructionSize(stmt);
+        stmt.size = size;
+        this.currentPC += size;
+      } else if (stmt.type == "DIRECTIVE") {
+        var size = this.calculateDirectiveSize(stmt);
+        stmt.size = size;
+        this.currentPC += size;
+      } else if (stmt.type == "LABEL_ONLY") {
+        stmt.size = 0;
+      }
+    }
+
+    var startPC = 0x0801;
+    if (this.statements.length() > 0) {
+      startPC = this.statements[0].pc;
+    }
+
+    return {
+      "symbolTable": this.symbolTable,
+      "statements": this.statements,
+      "startPC": startPC,
+      "endPC": this.currentPC
+    };
+  }
+
+  calculateInstructionSize(stmt) {
+    // zero-page early optimization
+    // if the operand is a literal number <= 255, downgrade ABSOLUTE -> ZERO_PAGE early
+    if (stmt.mode == AddressingMode.ABSOLUTE and isnumber(stmt.operand)) {
+      if (stmt.operand <= 255 and this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE)) {
+        stmt.mode = AddressingMode.ZERO_PAGE;
+        return 2;
+      }
+    }
+
+    if (stmt.mode == AddressingMode.ABSOLUTE_X and isnumber(stmt.operand)) {
+      if (stmt.operand <= 255 and this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE_X)) {
+        stmt.mode = AddressingMode.ZERO_PAGE_X;
+        return 2;
+      }
+    }
+
+    var mode = stmt.mode;
+
+    if (mode == AddressingMode.IMPLIED or mode == AddressingMode.ACCUMULATOR) {
+      return 1;
+    }
+    if (mode == AddressingMode.IMMEDIATE or
+        mode == AddressingMode.ZERO_PAGE or
+        mode == AddressingMode.ZERO_PAGE_X or
+        mode == AddressingMode.ZERO_PAGE_Y or
+        mode == AddressingMode.IND_X or
+        mode == AddressingMode.IND_Y or
+        mode == AddressingMode.RELATIVE) {
+      return 2;
+    }
+    if (mode == AddressingMode.ABSOLUTE or
+        mode == AddressingMode.ABSOLUTE_X or
+        mode == AddressingMode.ABSOLUTE_Y or
+        mode == AddressingMode.INDIRECT) {
+      return 3;
+    }
+    return 1;
+  }
+
+  supportsMode(mnemonic, mode) {
+    if (!this.opcodes.has(mnemonic)) return false;
+    return this.opcodes[mnemonic].has(mode);
+  }
+
+  calculateDirectiveSize(stmt) {
+    if (stmt.name == ".byte") {
+      if (typeof(stmt.operand) == "Array") return stmt.operand.length();
+      return 1;
+    }
+    if (stmt.name == ".word") {
+      if (typeof(stmt.operand) == "Array") return stmt.operand.length() * 2;
+      return 2;
+    }
+    if (stmt.name == ".text" or stmt.name == ".string") {
+      return stmt.operand.length();
+    }
+    return 0;
+  }
+}

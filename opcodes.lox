@@ -1,0 +1,100 @@
+class Opcode {
+  init(code, bytes) {
+    this.code = code; // hex byte value
+    this.bytes = bytes; // length in ram (1, 2, 3)
+  }
+}
+
+var OPCODES = {
+  "LDA": {
+    AddressingMode.IMMEDIATE:   Opcode(0xA9, 2),
+    AddressingMode.ZERO_PAGE:   Opcode(0xA5, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0xB5, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0xAD, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0xBD, 3),
+    AddressingMode.ABSOLUTE_Y:  Opcode(0xB9, 3),
+    AddressingMode.IND_X:       Opcode(0xA1, 2),
+    AddressingMode.IND_Y:       Opcode(0xB1, 2)
+  },
+  
+  "STA": {
+    AddressingMode.ZERO_PAGE:   Opcode(0x85, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0x95, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0x8D, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0x9D, 3),
+    AddressingMode.ABSOLUTE_Y:  Opcode(0x99, 3),
+    AddressingMode.IND_X:       Opcode(0x81, 2),
+    AddressingMode.IND_Y:       Opcode(0x91, 2)
+  },
+
+  // --- Register X Ops (Uses Y for ZP Indexing) ---
+  "LDX": {
+    AddressingMode.IMMEDIATE:   Opcode(0xA2, 2),
+    AddressingMode.ZERO_PAGE:   Opcode(0xA6, 2),
+    AddressingMode.ZERO_PAGE_Y: Opcode(0xB6, 2), // ZP,Y mode supported here!
+    AddressingMode.ABSOLUTE:    Opcode(0xAE, 3),
+    AddressingMode.ABSOLUTE_Y:  Opcode(0xBE, 3)
+  },
+  "STX": {
+    AddressingMode.ZERO_PAGE:   Opcode(0x86, 2),
+    AddressingMode.ZERO_PAGE_Y: Opcode(0x96, 2), // ZP,Y mode supported here!
+    AddressingMode.ABSOLUTE:    Opcode(0x8E, 3)
+  },
+
+  // --- Register Y Ops ---
+  "LDY": {
+    AddressingMode.IMMEDIATE:   Opcode(0xA0, 2),
+    AddressingMode.ZERO_PAGE:   Opcode(0xA4, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0xB4, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0xAC, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0xBC, 3)
+  },
+  "STY": {
+    AddressingMode.ZERO_PAGE:   Opcode(0x84, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0x94, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0x8C, 3)
+  },
+
+  // --- Increments & Decrements ---
+  "INC": {
+    AddressingMode.ZERO_PAGE:   Opcode(0xE6, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0xF6, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0xEE, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0xFE, 3)
+  },
+  "DEC": {
+    AddressingMode.ZERO_PAGE:   Opcode(0xC6, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0xD6, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0xCE, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0xDE, 3)
+  },
+  "INX": { AddressingMode.IMPLIED: Opcode(0xE8, 1) },
+  "INY": { AddressingMode.IMPLIED: Opcode(0xC8, 1) },
+  "DEX": { AddressingMode.IMPLIED: Opcode(0xCA, 1) },
+  "DEY": { AddressingMode.IMPLIED: Opcode(0x88, 1) },
+
+  // --- Branches (All RELATIVE 2-byte) ---
+  "BNE": { AddressingMode.RELATIVE: Opcode(0xD0, 2) },
+  "BEQ": { AddressingMode.RELATIVE: Opcode(0xF0, 2) },
+  "BCC": { AddressingMode.RELATIVE: Opcode(0x90, 2) },
+  "BCS": { AddressingMode.RELATIVE: Opcode(0xB0, 2) },
+  "BPL": { AddressingMode.RELATIVE: Opcode(0x10, 2) },
+  "BMI": { AddressingMode.RELATIVE: Opcode(0x30, 2) },
+
+  // --- Jumps & Subroutines ---
+  "JMP": {
+    AddressingMode.ABSOLUTE:    Opcode(0x4C, 3),
+    AddressingMode.INDIRECT:    Opcode(0x6C, 3)
+  },
+  "JSR": { AddressingMode.ABSOLUTE: Opcode(0x20, 3) },
+  "RTS": { AddressingMode.IMPLIED:  Opcode(0x60, 1) },
+  "NOP": { AddressingMode.IMPLIED:  Opcode(0xEA, 1) },
+
+  // --- Stack & Flags ---
+  "PHA": { AddressingMode.IMPLIED: Opcode(0x48, 1) },
+  "PLA": { AddressingMode.IMPLIED: Opcode(0x68, 1) },
+  "PHP": { AddressingMode.IMPLIED: Opcode(0x08, 1) },
+  "PLP": { AddressingMode.IMPLIED: Opcode(0x28, 1) },
+  "CLC": { AddressingMode.IMPLIED: Opcode(0x18, 1) },
+  "SEC": { AddressingMode.IMPLIED: Opcode(0x38, 1) }
+};
