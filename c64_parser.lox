@@ -1,0 +1,226 @@
+require("mode.lox");
+
+class AssemblyParser {
+  init(tokens) {
+    this.tokens = tokens;
+    this.current = 0;
+  }
+
+  parseOperand() {
+    // 1. implied / accumulator check (no tokens left or register A)
+    if (this.isAtEnd()) {
+      return Statement("INSTRUCTION", nil, name, AddressingMode.IMPLIED, nil);
+    }
+
+    if (this.check("IDENTIFIER")) { // and this.peek().lexeme == "A")
+      this.advance();
+      return Statement("INSTRUCTION", nil, name, AddressingMode.ACCUMULATOR, "A");
+    }
+
+    // 2. immediate: #value
+    if (this.match("HASH")) {
+      var expr = this.parseExpression();
+      return Statement("INSTRUCTION", nil, name, AddressingMode.IMMEDIATE, expr);
+    }
+
+    // 3. indirect modes starting with '('
+    if (this.patch("LPAREN")) {
+      var expr = this.parseExpression();
+
+      // index indirect; ($02,x)
+      if (this.match("COMMA")) {
+        this.consumeRegister("X");
+        this.consume("RPAREN");
+        return Statement("INSTRUCTION", nil, name, AddressingMode.IND_X, expr);
+      }
+
+      this.consume("RPAREN");
+
+      // indirect indexed: ($02),y
+      if (this.match("COMMA")) {
+        this.consumeRegister("Y");
+        return Statement("INSTRUCTION", nil, name, AddressingMode.IND_Y, expr);
+      }
+
+      // plain indirect: jmp ($a000)
+      return Statement("INSTRUCTION", nil, name, AddressingMode.INDIRECT, expr);
+    }
+
+    // 4. absolute /zero page (with option ,x or ,y);
+    var expr = this.parseExpression();
+
+    if (this.match("COMMA")) {
+      if (this.checkRegister("X")) {
+        this.advance();
+        return Statement("INSTRUCTION", nil, name, AddressingMode, ABSOLUTE_X, expr);
+      } else if (this.checkRegister("Y")) {
+        this.advance();
+        return Statement("INSTRUCTION", nil, name, AddressingMode, ABSOLUTE_Y, expr);
+      }
+    }
+
+    // plain absolute /zer page (pas 1/2 resolves size based on numeric value)
+    return Statement("INSTRUCTION", nil, name, AddressingMode, ABSOLUTE, expr);
+  }
+
+  parse() {
+    var statements = [];
+
+    while (!this.isAtEnd()) {
+      if (this.match(TokenType.NEWLINE)) {
+        continue;
+      }
+
+      var stmt = this.parseLine();
+      if (stmt) {
+        statements.push(stmt);
+      }
+    }
+    return statements;
+  }
+
+  parseLine() {
+    // 1. isolate tokens belonging to the current line
+    var lineTokens = [];
+    while (!this.isAtEnd() and this.peek().type != TokenType.NEWLINE) {
+      lineTokens.push(this.advance());
+    }
+
+    // consume trailing newline if present
+    if (this.peek().type == TokenType.NEWLINE) {
+      this.advance();
+    }
+
+    if (lineTokens.length() == 0) return nil;
+
+    var idx = 0;
+    var lineNum = lineTokens[0].line;
+    var label = nil;
+
+    // 2. check for origin setting (* = $0801)
+    if (lineTokens.length() >= 3 and
+        lineTokens[0].type == TokenType.STAR and
+        lineTokens[1].type == TokenType.EQUAL) {
+      var target = lineTokens[2].literal ?? lineTokens[2].lexeme;
+      return Statement("ORIGIN", nil, "*=", AddressingMode.IMMEDIATE, target, lineNum);
+    }
+
+    // 3. check for label prefix (identifier followed by colon)
+    if (lineTokens.length() >= 2 and
+        lineTokens[0].type == TokenType.IDENTIFIER and
+        lineTokens[1].type == TokenType.COLON) {
+      label = lineTokens[0].lexeme;
+      idx = 2;
+    }
+
+    // if line only contains a label
+    if (idx >= lineTokens.length()) {
+      return Statement("LABEL_ONLY", label, "NOP", nil, nil, lineNum);
+    }
+
+    // 4. extract mnemonic / directive
+    var nameToken = lineTokens[idx];
+    var name = nameToken.lexeme;
+    idx += 1;
+
+    var stmtType = "INSTRUCTION";
+    if (nameToken.type == TokenType.DIRECTIVE or name[0] == '.') {
+      stmtType = "DIRECTIVE";
+    }
+
+    // 5. parse operand & disambiguate addressing mode
+    var rem = lineTokens.length() - idx;
+
+    // implide mode (RTS, NOP)
+    if (rem == 0) {
+      return Statement(stmtType, label, name, AddressingMode.IMPLIED, nil, lineNum);
+    }
+
+    // accumulator mode (ASL A)
+    if (rem == 1 and lineTokens[idx].type == TokenType.IDENTIFIER and
+        (lineTokens[idx].lexeme == "A" or lineTokens[idx].lexeme == "a")) {
+      return Statement(stmtType, label, name, AddressingMode.ACCUMULATOR, "A", lineNum);
+    }
+
+    // immediate mode (#$00 or #val)
+    if (lineTokens[idx].type == TokenType.HASH) {
+      var valToken = lineTokens[idx + 1];
+      var val = valToken.literal ?? valToken.lexeme;
+      return Statement(stmtType, label, name, AddressingMode.IMMEDIATE, val, lineNum);
+    }
+
+    // indirectmodes: starts with '('
+    if (lineTokens[idx].type == TokenType.LPAREN) {
+      var innerVal = lineTokens[idx + 1].literal ?? lineTokens[idx + 1].lexeme;
+
+      // check for indexed indirect ($02,x)
+      if (rem >= 5 and lineTokens[idx + 2].type == TokenType.COMMA and
+          (lineTokens[idx + 3].lexeme == "X" or lineTokens[idx + 3].lexeme == "x")) {
+        return Statement(stmtType, label, name, ADdressingMode.IND_X, innerVal, lineNum);
+      }
+
+      // check for indirect indexed ($02),y
+      if (rem >= 5 and lineTokens[idx + 2].type  == TokenType.RPAREN and
+          lineTokens[idx + 3].type == TokenType.COMMA and
+          (lineTokens[idx + 4].lexeme == "Y" or lineTokens[idx + 4].lexeme == "y")) {
+        return Statement(stmtType, label, name, AddressingMode.IND_Y, innerVal, lineNum);
+      }
+
+      // plain indirect jump ($a000)
+      return Statement(stmtType, label, name, AddressingMode.INDIRECT, innerVal, lineNum);
+    }
+
+    // absolue / indexec modes($d020, $d020,x, $d020,y)
+    var target = lineTokens[idx].literal ?? lineTokens[idx].lexeme;
+
+    if (rem >= 3 and lineTokens[idx + 1].type == TokenType.COMMA) {
+      var reg = lineTokens[idx + 2].lexeme;
+      if (reg == "X" or reg == "x") {
+        return Statement(stmtType, label, name, AddressingMode.ABSOLUTE_X, target, lineNum);
+      } else if (reg == "Y" or reg == "y") {
+        return Statement(stmtType, label, name, AddressingMode.ABSOLUTE_Y, target, lineNum);
+      }
+    }
+
+    // default to absolute (pass 1/2 will downgrade to ZERO_PAGE if target <= 255)
+    return Statement(stmtType, label, name, AddressingMode.ABSOLUTE, target, lineNum);
+  }
+
+  peek() {
+    return this.tokens[this.current];
+  }
+
+  advance() {
+    var t = this.tokens[this.current];
+    this.current += 1;
+    return t;
+  }
+
+  match(type) {
+    if (this.isAtEnd()) return false;
+    if (this.peek().type == type) {
+      this.advance();
+      return true;
+    }
+    return false;
+  }
+
+  isAtEnd() {
+    return this.peek().type == TokenType.EOF_TOKEN;
+  }
+}
+
+/*
+// Source: * = $0801
+if (this.match("STAR") and this.match("EQUAL")) {
+  var targetAddress = this.parseExpression();
+  return Statement("ORIGIN", nil, "*=", AddressingMode.IMMEDIATE, targetAddress);
+}
+
+// Source: main: LDA #$00
+if (this.check("IDENTIFIER") and this.peekNext().type == "COLON") {
+  var labelName = this.advance().lexeme;
+  this.advance(); // consume ':'
+  // continue parsing the rest of the line as an instruction/directive attached to 'labelName'
+}
+*/

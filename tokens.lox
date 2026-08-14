@@ -1,0 +1,35 @@
+class TokenType {
+  const HASH = "HASH";
+  const COMMA = "COMMA";
+  const COLON = "COLON";
+  const LPAREN = "LPAREN";
+  const RPAREN = "RPAREN";
+  const EQUAL = "EQUAL";
+  const STAR = "STAR";
+
+  const IDENTIFIER = "IDENTIFIER"; // mnemonics, labels, register (A, X, Y)
+  const NUMBER = "NUMBER"; // decimal, hex ($), binary (%)
+  const STRING = "STRING"; // "hello" for .text directives
+  const DIRECTIVE = "DIRECTIVE"; // .byte, .word, .org
+
+  const NEWLINE = "NEWLINE";
+  const EOF_TOKEN = "EOF";
+}
+
+class Token {
+  init(type, lexeme, literal, line) {
+    this.type = type;
+    this.lexeme = lexeme;
+    this.literal = literal; // converted integer value for numbers, string for text
+    this.line = line;
+  }
+
+  to_string() {
+    var valStr = "";
+    if (this.literal) {
+      valStr = " (Value: " + this.literal + ")";
+    }
+    return "[" + this.line + "] " + this.type + " '" + this.lexeme + "'" + valStr;
+  }
+}
+

@@ -1,0 +1,42 @@
+class Opcode {
+  init(code, bytes) {
+    this.code = code; // hex byte value
+    this.bytes = bytes; // length in ram (1, 2, 3)
+  }
+}
+
+var OPCODES = {
+  "LDA": {
+    AddressingMode.IMMEDIATE:   Opcode(0xA9, 2),
+    AddressingMode.ZERO_PAGE:   Opcode(0xA5, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0xB5, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0xAD, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0xBD, 3),
+    AddressingMode.ABSOLUTE_Y:  Opcode(0xB9, 3),
+    AddressingMode.IND_X:       Opcode(0xA1, 2),
+    AddressingMode.IND_Y:       Opcode(0xB1, 2)
+  },
+  
+  "STA": {
+    AddressingMode.ZERO_PAGE:   Opcode(0x85, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0x95, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0x8D, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0x9D, 3),
+    AddressingMode.ABSOLUTE_Y:  Opcode(0x99, 3),
+    AddressingMode.IND_X:       Opcode(0x81, 2),
+    AddressingMode.IND_Y:       Opcode(0x91, 2)
+  },
+
+  "JMP": {
+    AddressingMode.ABSOLUTE:    Opcode(0x4C, 3),
+    AddressingMode.INDIRECT:    Opcode(0x6C, 3)
+  },
+
+  "NOP": {
+    AddressingMode.IMPLIED:     Opcode(0xEA, 1)
+  },
+
+  "BNE": {
+    AddressingMode.RELATIVE:    Opcode(0xD0, 2)
+  }
+};

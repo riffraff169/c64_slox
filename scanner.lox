@@ -1,0 +1,176 @@
+require("c64_parser.lox");
+require("tokens.lox");
+
+class AssemblyScanner {
+  init(source) {
+    this.source = source;
+    this.tokens = [];
+    this.len = (source == nil) ? 0 : source.length();
+    this.start = 0;
+    this.current = 0;
+    this.line = 1;
+  }
+
+  isAtEnd() {
+    return this.current >= this.len;
+  }
+
+  advance() {
+    var c = this.source[this.current];
+    this.current = this.current + 1;
+    return c;
+  }
+
+  peek() {
+    if (this.isAtEnd()) return '\0';
+    return this.source[this.current];
+  }
+
+  peekNext() {
+    if (this.current + 1 >= this.len) return 0;
+    return this.source[this.current + 1];
+  }
+
+  scanTokens() {
+    while (!this.isAtEnd()) {
+      this.start = this.current;
+      this.scanToken();
+    }
+
+    this.tokens.push(Token(TokenType.EOF_TOKEN, "", nil, this.line));
+    return this.tokens;
+  }
+
+  scanToken() {
+    var c = this.advance();
+
+    if (c == ' ' or c == '\r' or c == '\t') {
+      // ignore whitespace
+      return;
+    }
+
+    if (c == '\n') {
+      this.addToken(TokenType.NEWLINE, nil);
+      this.line = this.line + 1;
+      return;
+    }
+
+    if (c == ';') {
+      // comment
+      while (this.peek() != '\n' and !this.isAtEnd()) {
+        this.advance();
+      }
+      return;
+    }
+
+    if (c == '#') return this.addToken(TokenType.HASH, nil);
+    if (c == ',') return this.addToken(TokenType.COMMA, nil);
+    if (c == ':') return this.addToken(TokenType.COLON, nil);
+    if (c == '(') return this.addToken(TokenType.LPAREN, nil);
+    if (c == ')') return this.addToken(TokenType.RPAREN, nil);
+    if (c == '=') return this.addToken(TokenType.EQUAL, nil);
+    if (c == '*') return this.addToken(TokenType.STAR, nil);
+
+    // directives (.byte, .word, .org)
+    if (c == '.') {
+      this.directive();
+      return;
+    }
+
+    // hex numbers ($0801, $ff)
+    if (c == '$') {
+      this.hexNumber();
+      return;
+    }
+
+    // binary numbers (%00000001)
+    if (c == '%') {
+      this.binaryNumber();
+      return;
+    }
+
+    // decimal
+    if (isDigit(c)) {
+      this.decimalNumber();
+      return;
+    }
+
+    // identifiers and mnemonics (LDA, STA, main, loop)
+    if (isAlpha(c)) {
+      this.identifier();
+      return;
+    }
+
+    print "Error on line " + this.line + ": Unexpected character '" + c + "'";
+  }
+
+  // helpers & matchers
+
+  hexNumber() {
+    while (isHexDigit(this.peek())) {
+      this.advance();
+    }
+    var hexStr = this.source.slice(this.start + 1, this.current);
+    var val = parseHex(hexStr);
+    this.addToken(TokenType.NUMBER, val);
+  }
+
+  identifier() {
+    while (isAlphaNumeric(this.peek())) {
+      this.advance();
+    }
+    var text = this.source.slice(this.start, this.current);
+    this.addToken(TokenType.IDENTIFIER, nil);
+  }
+
+  addToken(type, literal) {
+    var text = this.source.slice(this.start, this.current);
+    this.tokens.push(Token(type, text, literal, this.line));
+  }
+
+  /*
+  scanLine() {
+    var tokens = [];
+    while (!this.isAtEnd() && this.peek() != "\n") {
+      this.start = this.current;
+      var c = this.advance();
+
+      if (c == ' ' or c == '\t' or c == '\r') {
+        // skip
+      } else if (c == ';') {
+        while (!this.isAtEnd() and this.peek() != '\n') {
+          this.advance();
+        }
+      } else if (c == '#') {
+        tokens.add(this.makeToken("HASH", "#"));
+      } else if (c == ',') {
+        tokens.add(this.makeToken("COMMA", ","));
+      } else if (c == '(') {
+        tokens.add(this.makeToken("LPAREN", "("));
+      } else if (c == ')') {
+        tokens.add(this.makeToken("RPAREN", ")"));
+      } else if (c == '=') {
+        tokens.add(this.makeToken("EQUAL", "="));
+      } else if (c == '*') {
+        tokens.add(this.makeToken("STAR", "*"));
+      } else if (c == ':') {
+        tokens.add(this.makeToken("COLON", ":"));
+      } else if (this.isAlpha(c) or c == '.' or c == '$' or c == '%' or c == '_') {
+        tokens.add(this.identifierOrLiteral(c));
+      } else if (this.isDigit(c)) {
+        tokens.add(this.numberLiteral());
+      }
+    }
+
+    if (!this.isAtEnd() and this.peek() == '\n') {
+      this.advance();
+      this.line = this.line + 1;
+    }
+
+    return tokens;
+  }
+  */
+
+
+}
+

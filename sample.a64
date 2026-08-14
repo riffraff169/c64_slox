@@ -1,0 +1,5 @@
+* = $0801
+main:
+    LDA #$00
+    STA $D020 ; set border color
+    RTS
