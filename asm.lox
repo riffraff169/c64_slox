@@ -1,0 +1,91 @@
+require("argparser.lox");
+require("scanner.lox");
+require("c64_parser.lox");
+require("opcodes.lox");
+require("pass1.lox");
+require("pass2.lox");
+require("prg_writer.lox");
+
+// 1. Configure CLI Parser
+var parser = ArgParser("slox asm.lox", "Assembles 6502 assembly source into a Commodore 64 .PRG file.");
+
+parser.addFlag("verbose", "v", "Enable detailed assembly logs and symbol table dump");
+parser.addOption("output", "o", nil, "Path to output binary file (default: input name with .prg)", true);
+
+// Use System.args (or ARGV depending on your VM environment)
+var parsed = parser.parse(System.ARGS);
+
+if (parsed == nil or parsed.args.length() < 1) {
+  print "Error: Missing input source file.";
+  print "Usage: slox asm.lox [options] <input.asm>";
+  System.exit(1);
+}
+
+var inputFile = parsed.args[0];
+var verbose = !!parsed.get("verbose");
+var outputFile = parsed.get("output");
+
+// Auto-derive output filename if -o / --output wasn't specified
+
+if (outputFile == nil) {
+  var ext4 = inputFile.slice(-4);
+  var ext2 = inputFile.slice(-2);
+
+  if (ext4 == ".asm" or ext4 == ".a64") {
+    outputFile = inputFile.slice(0, -4) + ".prg";
+  } else if (ext2 == ".s") {
+    outputFile = inputFile.slice(0, -2) + ".prg";
+  } else {
+    outputFile = inputFile + ".prg";
+  }
+}
+
+// 2. Read Source Code
+var source = File.load(inputFile);
+if (source == nil) {
+  print "Error: Could not read input file '" + inputFile + "'.";
+  System.exit(1);
+}
+
+if (verbose) print "--- [ Assembler Pipeline Start ] ---";
+if (verbose) print "Reading: " + inputFile;
+
+// 3. Scan & Parse
+var scanner = AssemblyScanner(source);
+var tokens = scanner.scanTokens();
+var parserObj = AssemblyParser(tokens);
+var statements = parserObj.parse();
+
+if (verbose) print "Scanned " + tokens.length() + " tokens into " + statements.length() + " statements.";
+
+// 4. Pass 1: Symbol Table & Address Resolution
+var pass1 = Pass1(statements, OPCODES);
+var pass1Result = pass1.run();
+var symbolTable = pass1Result["symbolTable"];
+
+if (verbose) {
+  print "\n--- Symbol Table ---";
+  var keys = symbolTable.keys();
+  for (var i = 0; i < keys.length(); i += 1) {
+    var k = keys[i];
+    print "  " + k + " -> $" + Math.hex(symbolTable[k], 4, false);
+  }
+  print "";
+}
+
+// 5. Pass 2: Machine Code Generation
+var pass2 = Pass2(pass1Result["statements"], symbolTable, OPCODES);
+var assembledBytes = pass2.run();
+
+// 6. Write .PRG File
+var startAddress = pass1Result["startAddress"] ?? 2049; // Default $0801
+var writer = PRGWriter(outputFile);
+
+if (writer.save(assembledBytes, startAddress)) {
+  print "Assembly successful!";
+  print "Input:  " + inputFile;
+  print "Output: " + outputFile + " (" + (assembledBytes.length() + 2) + " total bytes, start: $" + Math.hex(startAddress, 4, false) + ")";
+} else {
+  print "Error: Failed to write output file '" + outputFile + "'.";
+  System.exit(1);
+}
