@@ -6,6 +6,8 @@ class TokenType {
   const RPAREN = "RPAREN";
   const EQUAL = "EQUAL";
   const STAR = "STAR";
+  const PLUS = "PLUS";
+  const MINUS = "MINUS";
 
   const IDENTIFIER = "IDENTIFIER"; // mnemonics, labels, register (A, X, Y)
   const NUMBER = "NUMBER"; // decimal, hex ($), binary (%)

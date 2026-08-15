@@ -6,6 +6,7 @@ require("pass1.lox");
 require("pass2.lox");
 require("prg_writer.lox");
 require("sym_writer.lox");
+require("d64_writer.lox");
 
 // 1. Configure CLI Parser
 var parser = ArgParser("slox asm.lox", "Assembles 6502 assembly source into a Commodore 64 .PRG file.");
@@ -13,7 +14,7 @@ var parser = ArgParser("slox asm.lox", "Assembles 6502 assembly source into a Co
 parser.addFlag("verbose", "v", "Enable detailed assembly logs and symbol table dump");
 parser.addOption("output", "o", nil, "Path to output binary file (default: input name with .prg)", true);
 parser.addFlag("sym", "s", "Export VICE-compatible symbol map (.vs)");
-
+parser.addFlag("d64", "d", "Package executable into a blank .d64 disk image");
 
 // Use System.args (or ARGV depending on your VM environment)
 var parsed = parser.parse(System.ARGS);
@@ -104,3 +105,15 @@ if (!!parsed.get("sym")) {
   }
 }
 
+if (!!parsed.get("d64")) {
+  var d64File = inputFile.slice(0, -4) + ".d64";
+  var d64Writer = D64Writer(d64File, "SLOX DEMO", "2A");
+
+  var prgName = "RAINBOW";
+
+  if (d64Writer.save(assembledBytes, startAddress, prgName)) {
+    print "D64 Disk Image written: " + d64File;
+  } else {
+    print "Error: Failed to write D64 disk image '" + d64File + "'";
+  }
+}

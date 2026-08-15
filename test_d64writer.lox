@@ -1,0 +1,17 @@
+require("d64_writer.lox");
+
+var d64 = D64Writer("GAME DISK", "20");
+
+var mainBytes = [0x78, 0xad, 0x12, 0xd0, 0x60];
+d64.addPrgFile("RAINBOW", mainBytes, 2049);
+
+var musicPlayerBytes = [0xa9, 0x00, 0x8d, 0x20, 0xd0, 0x60];
+d64.addPrgFile("MUSIC_PLAYER", musicPlayerBytes, 4096);
+
+var levelData = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
+d64.addSeqFile("LEVEL1.DAT", levelData);
+
+
+if (d64.save("gamedisk.d64")) {
+  print "Multi-file d64 image written: gamedisk.d64";
+}

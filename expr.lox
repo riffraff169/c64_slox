@@ -1,0 +1,63 @@
+class ExpressionEvaluator {
+  evaluate(exprStr, symbolTable, currentPC) {
+    if (exprStr == nil or exprStr == "") return 0;
+
+    // high byte selector (>LABEL)
+    if (exprStr[0] == '>') {
+      var subVal = this.evaluate(exprStr.slice(1), symbolTable, currentPC);
+      return (subVal / 256).floor() % 256;
+    }
+
+    // low byte (<label)
+    if (exprStr[0] == '<') {
+      var subVal = this.evaluate(exprStr.slice(1), symbolTable, currentPC);
+      return subVal % 256;
+    }
+
+    // simple addition / subtraction
+    if (exprStr.find("+")) {
+      var parts = exprStr.split("+");
+      return this.evaluate(parts[0].trim(), symbolTable, currentPC) +
+        this.evaluate(parts[1].trim(), symbolTable, currentPC);
+    }
+
+    if (exprStr.find("-")) {
+      print exprStr;
+      var parts = exprStr.split("-");
+      return this.evaluate(parts[0].trim(), symbolTable, currentPC) -
+        this.evaluate(parts[1].trim(), symbolTable, currentPC);
+    }
+
+    if (exprStr.find("*")) {
+      var parts = exprStr.split("*");
+      return this.evaluate(parts[0].trim(), symbolTable, currentPC) *
+        this.evaluate(parts[1].trim(), symbolTable, currentPC);
+    }
+
+    // current pc symbol (*)
+    var trimmed = exprStr.trim();
+    if (trimmed == "*") return currentPC;
+
+    // hex literal ($d020)
+    if (trimmed[0] == '$') {
+      return Math.from_hex("0x" + trimmed.slice(1));
+    }
+
+    // binary literal
+    if (trimmed[0] == '%') {
+      return Math.from_bin(trimmed.slice(1));
+    }
+
+    if (symbolTable.has(trimmed)) {
+      return symbolTable[trimmed];
+    }
+
+    // decimal
+    var num = Number(trimmed);
+    if (num == 0 and trimmed.length() > 1) {
+      print "Error: Undefined symbol or expression '" + trimmed + "'";
+      System.exit(1);
+    }
+    return num;
+  }
+}

@@ -1,3 +1,5 @@
+require("expr.lox");
+
 class Pass2 {
   init(statements, symbolTable, opcodes) {
     this.statements = statements;
@@ -39,7 +41,7 @@ class Pass2 {
     }
 
     // 2. resolve operand value
-    var val = this.resolveOperand(stmt.operand, stmt.line);
+    var val = this.resolveOperand(stmt.operand, stmt.pc, stmt.line);
     if (val == nil) return;
 
     // 3. emit operand bytes base on mode
@@ -76,23 +78,27 @@ class Pass2 {
 
   assembleDirective(stmt) {
     var name = stmt.name.to_upper();
+    var currentPC = stmt.pc ?? 0;
 
     if (name == ".BYTE" or name == ".BASIC") {
       if (typeof(stmt.operand) == "Array") {
-        this.bytes = this.bytes + stmt.operand;
+        for (var i = 0; i < stmt.operand.length(); i += 1) {
+          var val = this.resolveOperand(stmt.operand[i], currentPC, stmt.line);
+          if (val) this.emitByte(val);
+        }
       } else {
-        var val = this.resolveOperand(stmt.operand, stmt.line);
-        this.emitByte(val);
+        var val = this.resolveOperand(stmt.operand, currentPC, stmt.line);
+        if (val) this.emitByte(val);
       }
     } else if (name == ".WORD") {
       if (typeof(stmt.operand) == "Array") {
         for (var i = 0; i < stmt.operand.length(); i += 1) {
-          var val = this.resolveOperand(stmt.operand[i], stmt.line);
-          this.emitWord(val);
+          var val = this.resolveOperand(stmt.operand[i], currentPC, stmt.line);
+          if (val) this.emitWord(val);
         }
       } else {
-        var val = this.resolveOperand(stmt.operand, stmt.line);
-        this.emitWord(val);
+        var val = this.resolveOperand(stmt.operand, currentPC, stmt.line);
+        if (val) this.emitWord(val);
       }
     } else if (stmt.name.to_upper() == ".TEXT" or stmt.name.to_upper() == ".STRING") {
       var str = stmt.operand;
@@ -103,7 +109,21 @@ class Pass2 {
     } 
   }
 
-  resolveOperand(op, line) {
+  resolveOperand(op, pc, line) {
+    if (op == nil) return nil;
+    if (isnumber(op)) return op;
+
+    var exprStr = op;
+
+    // strip immediate '#' prefix if still present
+    if (isstring(exprStr) and exprStr.length() > 0 and exprStr[0] == '#') {
+      exprStr = exprStr.slice(1);
+    }
+
+    var evaluator = ExpressionEvaluator();
+    return evaluator.evaluate(op, this.symbolTable, pc);
+
+    // not reached
     if (isnumber(op)) {
       return op;
     }

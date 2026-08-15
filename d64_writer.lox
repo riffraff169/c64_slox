@@ -1,0 +1,381 @@
+class D64Writer {
+  init(filepath, diskName = "SLOX DISK", diskId = "2A") {
+    this.filepath = filepath;
+    this.diskName = diskName;
+    this.diskId = diskId;
+
+    this.data = [0; 174848];
+    this.trackoffset = [0; 41];
+    for (var t = 2; t <= 35; t += 1) {
+      if (t <= 17) this.trackoffset[t] = this.trackoffset[t - 1] + 21;
+      else if (t <= 24) this.trackoffset[t] = this.trackoffset[t - 1] + 19;
+      else if (t <= 30) this.trackoffset[t] = this.trackoffset[t - 1] + 18;
+      else this.trackoffset[t] = this.trackoffset[t - 1] + 17;
+    }
+
+    // directory tracking pointers
+    this.currDirTrack = 18;
+    this.currDirSector = 1;
+    this.currDirSlot = 0;
+
+    // data allocation search position
+    this.allocTrack = 1;
+    this.allocSector = 0;
+
+    this.formatDisk();
+  }
+
+  getSectorOffset(track, sector) {
+    var totalSectors = 0;
+    /*
+    for (var t = 1; t < track; t += 1) {
+      if (t <= 17) totalSectors += 21;
+      else if (t <= 24) totalSectors += 19;
+      else if (t <= 30) totalSectors += 18;
+      else totalSectors += 17;
+    }
+    */
+    return (this.trackoffset[track] + sector) * 256;
+    //return (totalSectors + sector) * 256;
+  }
+
+  getMaxSectors(track) {
+    if (track <= 17) return 21;
+    if (track <= 24) return 19;
+    if (track <= 30) return 18;
+    return 17;
+  }
+
+  formatDisk() {
+    var bamOffset = this.getSectorOffset(18, 0);
+
+    this.data[bamOffset + 0] = 18;
+    this.data[bamOffset + 1] = 1;
+    this.data[bamOffset + 2] = 'A';
+
+    // mark all sectors on tracks 1-35 as free in BAM
+    for (var t = 1; t <= 35; t += 1) {
+      var entryOff = bamOffset + 4 + (t - 1) * 4;
+      var numSectors = this.getMaxSectors(t);
+
+      this.data[entryOff] = numSectors; // free count
+      this.data[entryOff + 1] = 255;    // bits 0-7
+      this.data[entryOff + 2] = 255;    // bits 8-15
+      this.data[entryOff + 3] = 255;    // bits 16-23
+    }
+
+    // write disk header name & id ($a0 padded)
+    for (var i = 0; i  < 16; i += 1) {
+      this.data[bamOffset + 144 + i] = (i < this.diskName.length()) ? this.diskName[i] : 160;
+    }
+    this.data[bamOffset + 162] = this.diskId[0];
+    this.data[bamOffset + 163] = this.diskId[1];
+    this.data[bamOffset + 164] = 160;
+    this.data[bamOffset + 165] = '2';
+    this.data[bamOffset + 166] = 'A';
+
+    // reserve track 18 sector 0 and sector 1
+    this.allocateSpecificSector(18, 0);
+    this.allocateSpecificSector(18, 1);
+
+    var dirOffset = this.getSectorOffset(18,1);
+    this.data[dirOffset + 0] = 0;
+    this.data[dirOffset + 1] = 255;
+  }
+
+  allocateSpecificSector(track, sector) {
+    var bamOffset = this.getSectorOffset(18,0);
+    var entryOff = bamOffset + 4 + (track - 1) * 4;
+
+    var byteIdx = (sector / 8).floor();
+    var bitIdx = sector %8;
+    var byteVal = this.data[entryOff + 1 + byteIdx];
+    var mask = 2 ** bitIdx;
+
+    // clear bit (0 = allocated) and decrement track count
+    this.data[entryOff + 1 + byteIdx] = byteVal - mask;
+    this.data[entryOff] = this.data[entryOff] - 1;
+  }
+
+  allocateNextFreeSector() {
+    while (this.allocTrack <= 35) {
+      if (this.allocTrack == 18) {
+        this.allocTrack = 19; //  skip track 18 reserved for bam/directory
+        this.allocSector = 0;
+      }
+
+      var maxSec = this.getMaxSectors(this.allocTrack);
+      var bamOffset = this.getSectorOffset(18, 0);
+      var entryOff = bamOffset + 4 + (this.allocTrack - 1) * 4;
+
+      while (this.allocSector < maxSec) {
+        var byteIdx = (this.allocSector / 8).floor();
+        var bitIdx = this.allocSector % 8;
+        var byteVal = this.data[entryOff + 1 + byteIdx];
+        var mask = 2 ** bitIdx;
+
+        // check if bit is set (1 == free)
+        if ((byteVal / mask).floor() % 2 == 1) {
+          var t = this.allocTrack;
+          var s = this.allocSector;
+
+          this.allocateSpecificSector(t, s);
+
+          // apply standard 10-sector interleave for contiguous reads
+          this.allocator = (this.allocSector + 10) % maxSec;
+          if (this.allocSector == s) {
+            this.allocTrack += 1;
+            this.allocSector = 0;
+          }
+
+          return [t, s];
+        }
+        this.allocSector += 1;
+      }
+      this.allocTrack += 1;
+      this.allocSector = 0;
+    }
+    print "Error: D64 Disk Image is full!";
+    System.exit(1);
+  }
+
+  addPrgFile(c64Name, prgBytes, startAddr) {
+    var fullPayload = [];
+    fullPayload.push(startAddr % 256);
+    fullPayload.push((startAddr / 256).floor() % 256);
+    fullPayload = fullPayload + prgBytes;
+
+    this.addRawFile(c64Name, fullPayload, 130); // 130 = $82 (prg)
+  }
+
+  // add raw seq data file (.seq)
+  addSeqFile(c64Name, dataBytes) {
+    this.addRawFile(c64Name, dataBytes, 129); // 129 = $81 (seq)
+  }
+
+  addRawFile(c64Name, payloadBytes, fileType) {
+    var offset = 0;
+    var blocksUsed =  0;
+    var firstTrack = 0;
+    var firstSector = 0;
+    var prevSecOffset = -1;
+
+    while (offset < payloadBytes.length()) {
+      var sec = this.allocateNextFreeSector();
+      var t = sec[0];
+      var s = sec[1];
+
+      if (firstTrack == 0) {
+        firstTrack = t;
+        firstSector = s;
+      }
+
+      var secOffset = this.getSectorOffset(t, s);
+      blocksUsed += 1;
+
+      // update link header of previous data block
+      if (prevSecOffset != -1) {
+        this.data[prevSecOffset + 0] = t;
+        this.data[prevSecOffset + 1] = s;
+      }
+
+      var remaining = payloadBytes.length() - offset;
+
+      if (remaining <= 254) {
+        // final block: track = 0, sector = byte count + 1
+        this.data[secOffset] = 0;
+        this.data[secOffset + 1] = remaining + 1;
+
+        for (var i = 0; i < remaining; i += 1) {
+          this.data[secOffset + 2 + i] = payloadBytes[offset + i];
+        }
+        offset += remaining;
+      } else {
+        // full block (254 data bytes)
+        for (var i = 0; i < 254; i += 1) {
+          this.data[secOffset + 2 + i] = payloadBytes[offset + i];
+        }
+        offset += 254;
+        prevSecOffset = secOffset;
+      }
+    }
+    this.writeDirectoryRecord(c64Name, fileType, firstTrack, firstSector, blocksUsed);
+  }
+
+  writeDirectoryRecord(filename, fileType, startTrack, startSector, blocksUsed) {
+    if (this.currDirSlot >= 8) {
+      // chain new directory sector on track 18 when current sector is full
+      var newDirSec = this.allocateNextDirectorySector();
+      var prevDirOffset = this.getSectorOffset(this.currDirTrack, this.currDirSector);
+
+      this.data[prevDirOffset + 0] = 18;
+      this.data[prevDirOffset + 1] = newDirSec;
+
+      this.currDirTrack = 18;
+      this.currDirSector = newDirSec;
+      this.currDirSLot = 0;
+
+      var newDirOffset = this.getSectorOffset(18, newDirSec);
+      this.data[newDirOffset] = 0;
+      this.data[newDirOffset + 1] = 255;
+    }
+
+    var dirOffset = this.getSectorOffset(this.currDirTrack, this.currDirSector);
+    var slotOffset = dirOffset + 2 + (this.currDirSlot * 32);
+
+    this.data[slotOffset] = fileType;
+    this.data[slotOffset + 1] = startTrack;
+    this.data[slotOffset + 2] = startSector;
+
+    // filename padded with $a0
+    var nameUpper = filename.to_upper();
+    for (var i = 0; i < 16; i += 1) {
+      this.data[slotOffset + 3 + i] = (i < nameUpper.length()) ? nameUpper[i] : 160;
+    }
+
+    // 16 bit block count
+    this.data[slotOffset + 28] = blocksUsed % 256;
+    this.data[slotOffset + 29] = (blocksUsed / 256).floor() % 256;
+
+    this.currDirSlot += 1;
+  }
+
+  allocateNextDirectorySector() {
+    var bamOffset = this.getSectorOffset(18, 0);
+    var entryOff = bamOffset + 4 + (18 - 1) * 4;
+
+    for (var s = 1; s < 19; s += 1) {
+      var bytIdx = (s / 8).floor();
+      var bitIdx = s % 8;
+      var byteVal = this.data[entryOff + 1 + byteIdx];
+      var mask = 2 ** bitIdx;
+
+      if ((byteVal / mask).floor() % 2 == 1) {
+        this.allocateSpecificSector(18, s);
+        return s;
+      }
+    }
+    print "Error: Track 18 Directory space full!";
+    System.exit(1);
+  }
+
+
+  save(filepath) {
+    return File.save(filepath, this.data.to_string());
+  }
+
+  /*
+  save(prgBytes, prgStartAddr = nil, prgName = nil) {
+    var c64Name = (prgName ?? "PROGRAM".to_upper());
+
+    // 1. initialize bam (track 18, sector 0)
+    this.formatBAM();
+    
+    // 2. combine 2-byte load addresss + prg code bytes
+    var fullPayload = [];
+    fullPayload.push(prgStartAddr % 256);
+    fullPayload.push((prgStartAddr / 256).floor() % 256);
+    fullPayload = fullPayload + prgBytes;
+
+    // 3. write prg payload sectors starting at track 1, sector 0
+    var startTrack = 1;
+    var startSector = 0;
+    var currTrack = startTrack;
+    var currSector = startSector;
+
+    var offset = 0;
+    var blocksUsed = 0;
+
+    while (offset < fullPayload.length()) {
+      var remaining = fullPayload.length() - offset;
+      var sectorOffset = this.getSectorOffset(currTrack, currSector);
+      blocksUsed += 1;
+
+      if (remaining <= 254) {
+        // final sector: track = 0, sector = last byte offset + 1;
+        this.data[sectorOffset] = 0;
+        this.data[sectorOffset + 1] = remaining + 1;
+
+        for (var i = 0; i < remaining; i += 1) {
+          this.data[sectorOffset + 2 + i] = fullPayload[offset + i];
+        }
+        offset += remaining;
+      } else {
+        // next sector allocation (simple sequential track 1 sector allocation)
+        var nextTrack = currTrack;
+        var nextSector = currSector + 1;
+
+        this.data[sectorOffset] = nextTrack;
+        this.data[sectorOffset + 1] = nextSector;
+
+        for (var i = 0; i < 254; i += 1) {
+          this.data[sectorOffset + 2 + i] = fullPayload[offset + i];
+        }
+
+        offset += 254;
+        currTrack = nextTrack;
+        currSector = nextSector;
+      }
+    }
+
+    // 4. create directory entry on track 18, sector 1
+    this.writeDirectoryEntry(c64Name, startTrack, startSector, blocksUsed);
+
+    print this.filepath;
+    // 5. save d64 imagme to file
+    return File.save(this.filepath, this.data.to_string());
+  }
+  */
+
+  formatBAM() {
+    var bamOffset = this.getSectorOffset(18,0);
+    
+    // pointer to first directory sector (track 18, sector 1)
+    this.data[bamOffset + 0] = 18;
+    this.data[bamOffset + 1] = 1;
+    this.data[bamOffset + 2] = 65; // 'A' (dos version)
+
+    // disk name (16 bytes at offset 144, padded with $a0)
+    for (var i = 0; i < 16; i += 1) {
+      if (i < this.diskName.length()) {
+        this.data[bamOffset + 144 + i] = this.diskName[i];
+      } else {
+        this.data[bamOffset + 144 + i] = 160; // $a0 shift space
+      }
+    }
+
+    // disk id (2 bytes at offset 162)
+    this.data[bamOffset + 162] = this.diskId[0];
+    this.data[bamOffset + 163] = this.diskId[1];
+    this.data[bamOffset + 164] = 160; // $a0
+    this.data[bamOffset + 165] = 50; // '2'
+    this.data[bamOffset + 166] = 65; // 'A'
+  }
+
+  writeDirectoryEntry(filename, startTrack, startSector, blocksUsed) {
+    var dirOffset = this.getSectorOffset(18, 1);
+
+    // link pointer (0, $ff indicates last directory sector)
+    this.data[dirOffset + 0] = 0;
+    this.data[dirOffset + 1] = 255;
+
+    // first entry slot (offset + 2)
+    this.data[dirOffset + 2] = 130; // $82 = closed prg file type
+    this.data[dirOffset + 3] = startTrack;
+    this.data[dirOffset + 4] = startSector;
+
+    // filename (16 bytes padded with $a0)
+    for (var i = 0; i < 16; i += 1) {
+      if (i < filename.length()) {
+        this.data[dirOffset + 5 + i] = filename[i];
+      } else {
+        this.data[dirOffset + 5 + i] = 160;
+      }
+    }
+
+    // size in blocks (16 bit little endian)
+    this.data[dirOffset + 30] = blocksUsed % 266;
+    this.data[dirOffset + 31] = (blocksUsed / 256).floor() % 256;
+  }
+}
+

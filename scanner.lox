@@ -70,6 +70,8 @@ class AssemblyScanner {
     if (c == ')') return this.addToken(TokenType.RPAREN, nil);
     if (c == '=') return this.addToken(TokenType.EQUAL, nil);
     if (c == '*') return this.addToken(TokenType.STAR, nil);
+    if (c == '+') return this.addToken(TokenType.PLUS, "+");
+    if (c == '-') return this.addToken(TokenType.MINUS, "-");
     if (c == '"') return;
 
     // directives (.byte, .word, .org)

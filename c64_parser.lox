@@ -74,6 +74,12 @@ class AssemblyParser {
           symName = symName.slice(0, -1);
         }
 
+        var valExpr = this.tokensToString(lineTokens, 2, lineTokens.length());
+        return Statement("CONSTANT", symName, opLexeme, nil, valExpr, lineNum);
+      }
+    }
+
+    /*
         var valToken = lineTokens[2];
         var val = valToken.literal ?? valToken.lexeme;
 
@@ -86,6 +92,7 @@ class AssemblyParser {
         return Statement("CONSTANT", symName, opLexeme, nil, val, lineNum);
       }
     }
+    */
 
     // 3. check for label prefix (identifier followed by colon)
     if (lineTokens.length() >= 2 and
@@ -116,6 +123,7 @@ class AssemblyParser {
 
     // 5. parse operand & disambiguate addressing mode
     var rem = lineTokens.length() - idx;
+    var lastIdx = lineTokens.length() - 1;
 
     // implied mode (RTS, NOP)
     if (rem == 0) {
@@ -128,37 +136,73 @@ class AssemblyParser {
       return Statement(stmtType, label, name, AddressingMode.ACCUMULATOR, "A", lineNum);
     }
 
-    // immediate mode (#$00 or #val)
+    // immediate mode: #$00, #BORDER_COLOR + 1, #>LABEL
     if (lineTokens[idx].type == TokenType.HASH) {
+      var expr = this.tokensToString(lineTokens, idx + 1, lineTokens.length());
+      return Statement(stmtType, label, name, AddressingMode.IMMEDIATE, expr, lineNum);
+      /*
       var valToken = lineTokens[idx + 1];
       var val = valToken.literal ?? valToken.lexeme;
       return Statement(stmtType, label, name, AddressingMode.IMMEDIATE, val, lineNum);
+      */
     }
 
     // indirectmodes: starts with '('
     if (lineTokens[idx].type == TokenType.LPAREN) {
-      var innerVal = lineTokens[idx + 1].literal ?? lineTokens[idx + 1].lexeme;
+      //var innerVal = lineTokens[idx + 1].literal ?? lineTokens[idx + 1].lexeme;
 
-      // check for indexed indirect ($02,x)
+      // check for indexed indirect ($02,x) -> ends with comma, x, rparen
+      if (rem >= 5 and
+          lineTokens[lastIdx - 2].type == TokenType.COMMA and
+          (lineTokens[lastIdx - 1].lexeme == "X" or lineTokens[lastIdx - 1].lexeme == "x") and
+          lineTokens[lastIdx].type == TokenType.RPAREN) {
+        var expr = this.tokensToString(lineTokens, idx + 1, lastIdx - 2);
+        return Statement(stmtType, label, name, AddressingMode.IND_X, expr, lineNum);
+      }
+
+      /*
       if (rem >= 5 and lineTokens[idx + 2].type == TokenType.COMMA and
           (lineTokens[idx + 3].lexeme == "X" or lineTokens[idx + 3].lexeme == "x")) {
         return Statement(stmtType, label, name, ADdressingMode.IND_X, innerVal, lineNum);
       }
+      */
 
-      // check for indirect indexed ($02),y
+      // check for indirect indexed ($02),y -> ends with rparent, comma, y
       if (rem >= 5 and lineTokens[idx + 2].type  == TokenType.RPAREN and
           lineTokens[idx + 3].type == TokenType.COMMA and
           (lineTokens[idx + 4].lexeme == "Y" or lineTokens[idx + 4].lexeme == "y")) {
-        return Statement(stmtType, label, name, AddressingMode.IND_Y, innerVal, lineNum);
+        var expr = this.tokensToString(lineTokens, idx + 1, lastIdx - 2);
+        return Statement(stmtType, label, name, AddressingMode.IND_Y, expr, lineNum);
+        //return Statement(stmtType, label, name, AddressingMode.IND_Y, innerVal, lineNum);
       }
 
-      // plain indirect jump ($a000)
-      return Statement(stmtType, label, name, AddressingMode.INDIRECT, innerVal, lineNum);
+      // plain indirect jump ($a000) - ends with rparen
+      if (lineTokens[lastIdx].type == TokenType.RPAREN) {
+        var expr = this.tokensToString(lineTokens, idx + 1, lastIdx);
+        return Statement(stmtType, label, name, AddressingMode.INDIRECT, expr, lineNum);
+      }
     }
 
-    // absolue / indexec modes($d020, $d020,x, $d020,y)
-    var target = lineTokens[idx].literal ?? lineTokens[idx].lexeme;
+    // absolute / indexed modes($d020, $d020,x, $d020,y)
+    // indexed absolute / zero page: ends with ,x or ,y
+    //var target = lineTokens[idx].literal ?? lineTokens[idx].lexeme;
 
+    if (rem >= 3 and lineTokens[lastIdx - 1].type == TokenType.COMMA) {
+      var reg = lineTokens[lastIdx].lexeme.to_upper();
+      var expr = this.tokensToString(lineTokens, idx, lastIdx - 1);
+
+      if (reg == "X") {
+        return Statement(stmtType, label, name, AddressingMode.ABSOLUTE_X, expr, lineNum);
+      } else if (reg == "Y") {
+        return Statement(stmtType, label, name, AddressingMode.ABSOLUTE_Y, expr, lineNum);
+      }
+    }
+
+    var targetExpr = this.tokensToString(lineTokens, idx, lineTokens.length());
+    var mode = (this.isBranch(name)) ? AddressingMode.RELATIVE : AddressingMode.ABSOLUTE;
+
+    return Statement(stmtType, label, name, mode, targetExpr, lineNum);
+    /*
     if (rem >= 3 and lineTokens[idx + 1].type == TokenType.COMMA) {
       var reg = lineTokens[idx + 2].lexeme;
       if (reg == "X" or reg == "x") {
@@ -173,6 +217,17 @@ class AssemblyParser {
 
     // default to absolute (pass 1/2 will downgrade to ZERO_PAGE if target <= 255)
     return Statement(stmtType, label, name, mode, target, lineNum);
+    */
+  }
+
+  tokensToString(tokens, start, end) {
+    var str = "";
+    for (var i = start; i < end; i += 1) {
+      if (i > start)
+        str = str + " ";
+      str = str + tokens[i].lexeme;
+    }
+    return str;
   }
 
   parseDirective(lineTokens, startIdx, label, lineNum) {
