@@ -1,3 +1,5 @@
+require("mode.lox");
+
 class Opcode {
   init(code, bytes) {
     this.code = code; // hex byte value

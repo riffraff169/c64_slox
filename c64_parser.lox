@@ -3,9 +3,10 @@ require("mode.lox");
 class AssemblyParser {
   const branchOpcodes = ["BNE", "BEQ", "BCC", "BCS", "BPL", "BMI", "BVC", "BVS"];
 
-  init(tokens) {
+  init(tokens, visitedFiles = nil) {
     this.tokens = tokens;
     this.current = 0;
+    this.visitedFiles = visitedFiles ?? [];
   }
 
   isBranch(mnemonic) {
@@ -26,7 +27,11 @@ class AssemblyParser {
 
       var stmt = this.parseLine();
       if (stmt) {
-        statements.push(stmt);
+        if (typeof(stmt) == "Array") {
+          statements = statements + stmt;
+        } else {
+          statements.push(stmt);
+        }
       }
     }
     return statements;
@@ -181,7 +186,46 @@ class AssemblyParser {
       return Statement("DIRECTIVE", label, dirName, nil, wordValues, lineNum);
     }
 
+    if (dirName == ".INCLUDE") {
+      if (idx >= lineTokens.length()) {
+        print "Error: Missing filename for .include directive on line " + lineNum;
+        System.exit(1);
+      }
+
+      var pathToken = lineTokens[idx];
+      var path = pathToken.lexeme;
+
+      if (path[0] == '"') {
+        path = path.slice(1, -1);
+      }
+
+      return this.processInclude(path, lineNum);
+    }
+
     return nil;
+  }
+
+  processInclude(path, lineNum) {
+    for (var i = 0; i < this.visitedFiles.length(); i += 1) {
+      if (this.visitedFiles[i] == path) {
+        print "Error: Circular .include detected for '" + path + "' on line " + lineNum;
+        System.exit(1);
+      }
+    }
+
+    var includeSource = File.load(path);
+    if (includeSource == nil) {
+      print "Error: Could not read included file '" + path + "' on line " + lineNum;
+      System.exit(1);
+    }
+
+    this.visitedFiles.push(path);
+
+    var scanner = AssemblyScanner(includeSource);
+    var tokens = scanner.scanTokens();
+    var subParser = AssemblyParser(tokens, this.visitedFiles);
+
+    return subParser.parse();
   }
 
   peek() {
