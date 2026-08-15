@@ -2,6 +2,8 @@ class ExpressionEvaluator {
   evaluate(exprStr, symbolTable, currentPC) {
     if (exprStr == nil or exprStr == "") return 0;
 
+    if (isnumber(exprStr))
+      return exprStr;
     // high byte selector (>LABEL)
     if (exprStr[0] == '>') {
       var subVal = this.evaluate(exprStr.slice(1), symbolTable, currentPC);
@@ -22,7 +24,6 @@ class ExpressionEvaluator {
     }
 
     if (exprStr.find("-")) {
-      print exprStr;
       var parts = exprStr.split("-");
       return this.evaluate(parts[0].trim(), symbolTable, currentPC) -
         this.evaluate(parts[1].trim(), symbolTable, currentPC);

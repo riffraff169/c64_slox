@@ -110,8 +110,9 @@ if (!!parsed.get("d64")) {
   var d64Writer = D64Writer(d64File, "SLOX DEMO", "2A");
 
   var prgName = "RAINBOW";
+  d64Writer.addPrgFile(prgName, assembledBytes, startAddress); 
 
-  if (d64Writer.save(assembledBytes, startAddress, prgName)) {
+  if (d64Writer.save(d64File)) {
     print "D64 Disk Image written: " + d64File;
   } else {
     print "Error: Failed to write D64 disk image '" + d64File + "'";

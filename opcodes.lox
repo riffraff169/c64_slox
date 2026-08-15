@@ -8,6 +8,7 @@ class Opcode {
 }
 
 var OPCODES = {
+  // load
   "LDA": {
     AddressingMode.IMMEDIATE:   Opcode(0xA9, 2),
     AddressingMode.ZERO_PAGE:   Opcode(0xA5, 2),
@@ -18,7 +19,22 @@ var OPCODES = {
     AddressingMode.IND_X:       Opcode(0xA1, 2),
     AddressingMode.IND_Y:       Opcode(0xB1, 2)
   },
+  "LDX": {
+    AddressingMode.IMMEDIATE:   Opcode(0xA2, 2),
+    AddressingMode.ZERO_PAGE:   Opcode(0xA6, 2),
+    AddressingMode.ZERO_PAGE_Y: Opcode(0xB6, 2), // ZP,Y mode supported here!
+    AddressingMode.ABSOLUTE:    Opcode(0xAE, 3),
+    AddressingMode.ABSOLUTE_Y:  Opcode(0xBE, 3)
+  },
+  "LDY": {
+    AddressingMode.IMMEDIATE:   Opcode(0xA0, 2),
+    AddressingMode.ZERO_PAGE:   Opcode(0xA4, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0xB4, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0xAC, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0xBC, 3)
+  },
   
+  // store
   "STA": {
     AddressingMode.ZERO_PAGE:   Opcode(0x85, 2),
     AddressingMode.ZERO_PAGE_X: Opcode(0x95, 2),
@@ -28,33 +44,81 @@ var OPCODES = {
     AddressingMode.IND_X:       Opcode(0x81, 2),
     AddressingMode.IND_Y:       Opcode(0x91, 2)
   },
-
-  // --- Register X Ops (Uses Y for ZP Indexing) ---
-  "LDX": {
-    AddressingMode.IMMEDIATE:   Opcode(0xA2, 2),
-    AddressingMode.ZERO_PAGE:   Opcode(0xA6, 2),
-    AddressingMode.ZERO_PAGE_Y: Opcode(0xB6, 2), // ZP,Y mode supported here!
-    AddressingMode.ABSOLUTE:    Opcode(0xAE, 3),
-    AddressingMode.ABSOLUTE_Y:  Opcode(0xBE, 3)
-  },
   "STX": {
     AddressingMode.ZERO_PAGE:   Opcode(0x86, 2),
     AddressingMode.ZERO_PAGE_Y: Opcode(0x96, 2), // ZP,Y mode supported here!
     AddressingMode.ABSOLUTE:    Opcode(0x8E, 3)
   },
-
-  // --- Register Y Ops ---
-  "LDY": {
-    AddressingMode.IMMEDIATE:   Opcode(0xA0, 2),
-    AddressingMode.ZERO_PAGE:   Opcode(0xA4, 2),
-    AddressingMode.ZERO_PAGE_X: Opcode(0xB4, 2),
-    AddressingMode.ABSOLUTE:    Opcode(0xAC, 3),
-    AddressingMode.ABSOLUTE_X:  Opcode(0xBC, 3)
-  },
   "STY": {
     AddressingMode.ZERO_PAGE:   Opcode(0x84, 2),
     AddressingMode.ZERO_PAGE_X: Opcode(0x94, 2),
     AddressingMode.ABSOLUTE:    Opcode(0x8C, 3)
+  },
+
+  // register transfers
+  "TAX": { AddressingMode.IMPLIED: Opcode(0xAA, 1) },
+  "TAY": { AddressingMode.IMPLIED: Opcode(0xA8, 1) },
+  "TXA": { AddressingMode.IMPLIED: Opcode(0x8A, 1) },
+  "TYA": { AddressingMode.IMPLIED: Opcode(0x98, 1) },
+  "TSX": { AddressingMode.IMPLIED: Opcode(0xBA, 1) },
+  "TXS": { AddressingMode.IMPLIED: Opcode(0x9A, 1) },
+
+  // arithmetic (adc, sbc)
+  "ADC": {
+    AddressingMode.IMMEDIATE:   Opcode(0x69, 2),
+    AddressingMode.ZERO_PAGE:   Opcode(0x65, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0x75, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0x6D, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0x7D, 3),
+    AddressingMode.ABSOLUTE_Y:  Opcode(0x79, 3),
+    AddressingMode.IND_X:       Opcode(0x61, 2),
+    AddressingMode.IND_Y:       Opcode(0x71, 2)
+  },
+  "SBC": {
+    AddressingMode.IMMEDIATE:   Opcode(0xE9, 2),
+    AddressingMode.ZERO_PAGE:   Opcode(0xE5, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0xF5, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0xED, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0xFD, 3),
+    AddressingMode.ABSOLUTE_Y:  Opcode(0xF9, 3),
+    AddressingMode.IND_X:       Opcode(0xE1, 2),
+    AddressingMode.IND_Y:       Opcode(0xF1, 2)
+  },
+
+  // logical operations
+  "AND": {
+    AddressingMode.IMMEDIATE:   Opcode(0x29, 2),
+    AddressingMode.ZERO_PAGE:   Opcode(0x25, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0x35, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0x2D, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0x3D, 3),
+    AddressingMode.ABSOLUTE_Y:  Opcode(0x39, 3),
+    AddressingMode.IND_X:       Opcode(0x21, 2),
+    AddressingMode.IND_Y:       Opcode(0x31, 2)
+  },
+  "ORA": {
+    AddressingMode.IMMEDIATE:   Opcode(0x09, 2),
+    AddressingMode.ZERO_PAGE:   Opcode(0x05, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0x15, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0x0D, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0x1D, 3),
+    AddressingMode.ABSOLUTE_Y:  Opcode(0x19, 3),
+    AddressingMode.IND_X:       Opcode(0x01, 2),
+    AddressingMode.IND_Y:       Opcode(0x11, 2)
+  },
+  "EOR": {
+    AddressingMode.IMMEDIATE:   Opcode(0x49, 2),
+    AddressingMode.ZERO_PAGE:   Opcode(0x45, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0x55, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0x4D, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0x5D, 3),
+    AddressingMode.ABSOLUTE_Y:  Opcode(0x59, 3),
+    AddressingMode.IND_X:       Opcode(0x41, 2),
+    AddressingMode.IND_Y:       Opcode(0x51, 2)
+  },
+  "BIT": {
+    AddressingMode.ZERO_PAGE:   Opcode(0x24, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0x2C, 3)
   },
 
   // --- Increments & Decrements ---
@@ -75,35 +139,41 @@ var OPCODES = {
   "DEX": { AddressingMode.IMPLIED: Opcode(0xCA, 1) },
   "DEY": { AddressingMode.IMPLIED: Opcode(0x88, 1) },
 
-  // --- Branches (All RELATIVE 2-byte) ---
-  "BNE": { AddressingMode.RELATIVE: Opcode(0xD0, 2) },
-  "BEQ": { AddressingMode.RELATIVE: Opcode(0xF0, 2) },
-  "BCC": { AddressingMode.RELATIVE: Opcode(0x90, 2) },
-  "BCS": { AddressingMode.RELATIVE: Opcode(0xB0, 2) },
-  "BPL": { AddressingMode.RELATIVE: Opcode(0x10, 2) },
-  "BMI": { AddressingMode.RELATIVE: Opcode(0x30, 2) },
-
-  // --- Jumps & Subroutines ---
-  "JMP": {
-    AddressingMode.ABSOLUTE:    Opcode(0x4C, 3),
-    AddressingMode.INDIRECT:    Opcode(0x6C, 3)
+  // shifts and rotates
+  "ASL": {
+    AddressingMode.ACCUMULATOR: Opcode(0x0A, 1),
+    AddressingMode.IMPLIED:     Opcode(0x0A, 1),
+    AddressingMode.ZERO_PAGE:   Opcode(0x06, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0x16, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0x0E, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0x1E, 3)
   },
-  "JSR": { AddressingMode.ABSOLUTE: Opcode(0x20, 3) },
-  "RTS": { AddressingMode.IMPLIED:  Opcode(0x60, 1) },
-  "NOP": { AddressingMode.IMPLIED:  Opcode(0xEA, 1) },
+  "LSR": {
+    AddressingMode.ACCUMULATOR: Opcode(0x4A, 1),
+    AddressingMode.IMPLIED:     Opcode(0x4A, 1),
+    AddressingMode.ZERO_PAGE:   Opcode(0x46, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0x56, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0x4E, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0x5E, 3)
+  },
+  "ROL": {
+    AddressingMode.ACCUMULATOR: Opcode(0x2A, 1),
+    AddressingMode.IMPLIED:     Opcode(0x2A, 1),
+    AddressingMode.ZERO_PAGE:   Opcode(0x26, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0x36, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0x2E, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0x3E, 3)
+  },
+  "ROR": {
+    AddressingMode.ACCUMULATOR: Opcode(0x6A, 1),
+    AddressingMode.IMPLIED:     Opcode(0x6A, 1),
+    AddressingMode.ZERO_PAGE:   Opcode(0x66, 2),
+    AddressingMode.ZERO_PAGE_X: Opcode(0x76, 2),
+    AddressingMode.ABSOLUTE:    Opcode(0x6E, 3),
+    AddressingMode.ABSOLUTE_X:  Opcode(0x7E, 3)
+  },
 
-  // --- Stack & Flags ---
-  "PHA": { AddressingMode.IMPLIED: Opcode(0x48, 1) },
-  "PLA": { AddressingMode.IMPLIED: Opcode(0x68, 1) },
-  "PHP": { AddressingMode.IMPLIED: Opcode(0x08, 1) },
-  "PLP": { AddressingMode.IMPLIED: Opcode(0x28, 1) },
-  "CLC": { AddressingMode.IMPLIED: Opcode(0x18, 1) },
-  "SEC": { AddressingMode.IMPLIED: Opcode(0x38, 1) },
-
-  // SEI - Set Interrupt Disable
-  "SEI": { AddressingMode.IMPLIED: Opcode(0x78, 1) },
-
-  // CMP - Compare Accumulator
+  // comparisons
   "CMP": {
     AddressingMode.IMMEDIATE:   Opcode(0xC9, 2),
     AddressingMode.ZERO_PAGE:   Opcode(0xC5, 2),
@@ -114,18 +184,51 @@ var OPCODES = {
     AddressingMode.IND_X:       Opcode(0xC1, 2),
     AddressingMode.IND_Y:       Opcode(0xD1, 2)
   },
-
-  // CPX - Compare X Register
   "CPX": {
     AddressingMode.IMMEDIATE: Opcode(0xE0, 2),
     AddressingMode.ZERO_PAGE: Opcode(0xE4, 2),
     AddressingMode.ABSOLUTE:  Opcode(0xEC, 3)
   },
-
-  // CPY - Compare Y Register
   "CPY": {
     AddressingMode.IMMEDIATE: Opcode(0xC0, 2),
     AddressingMode.ZERO_PAGE: Opcode(0xC4, 2),
     AddressingMode.ABSOLUTE:  Opcode(0xCC, 3)
-  }
+  },
+
+
+  // --- Branches ---
+  "BCC": { AddressingMode.RELATIVE: Opcode(0x90, 2) },
+  "BCS": { AddressingMode.RELATIVE: Opcode(0xB0, 2) },
+  "BEQ": { AddressingMode.RELATIVE: Opcode(0xF0, 2) },
+  "BMI": { AddressingMode.RELATIVE: Opcode(0x30, 2) },
+  "BNE": { AddressingMode.RELATIVE: Opcode(0xD0, 2) },
+  "BPL": { AddressingMode.RELATIVE: Opcode(0x10, 2) },
+  "BVC": { AddressingMode.RELATIVE: Opcode(0x50, 2) },
+  "BVS": { AddressingMode.RELATIVE: Opcode(0x70, 2) },
+
+  // --- Jumps & Subroutines ---
+  "JMP": {
+    AddressingMode.ABSOLUTE:    Opcode(0x4C, 3),
+    AddressingMode.INDIRECT:    Opcode(0x6C, 3)
+  },
+  "JSR": { AddressingMode.ABSOLUTE: Opcode(0x20, 3) },
+  "RTS": { AddressingMode.IMPLIED:  Opcode(0x60, 1) },
+  "RTI": { AddressingMode.IMPLIED:  Opcode(0x40, 1) },
+
+  // --- Stack ---
+  "PHA": { AddressingMode.IMPLIED: Opcode(0x48, 1) },
+  "PLA": { AddressingMode.IMPLIED: Opcode(0x68, 1) },
+  "PHP": { AddressingMode.IMPLIED: Opcode(0x08, 1) },
+  "PLP": { AddressingMode.IMPLIED: Opcode(0x28, 1) },
+
+  // flags
+  "CLC": { AddressingMode.IMPLIED: Opcode(0x18, 1) },
+  "SEC": { AddressingMode.IMPLIED: Opcode(0x38, 1) },
+  "CLI": { AddressingMode.IMPLIED: Opcode(0x58, 1) },
+  "SEI": { AddressingMode.IMPLIED: Opcode(0x78, 1) },
+  "CLV": { AddressingMode.IMPLIED: Opcode(0xB8, 1) },
+  "CLD": { AddressingMode.IMPLIED: Opcode(0xD8, 1) },
+  "SED": { AddressingMode.IMPLIED: Opcode(0xF8, 1) },
+  "BRK": { AddressingMode.IMPLIED: Opcode(0x00, 1) },
+  "NOP": { AddressingMode.IMPLIED:  Opcode(0xEA, 1) }
 };

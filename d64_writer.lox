@@ -6,10 +6,11 @@ class D64Writer {
 
     this.data = [0; 174848];
     this.trackoffset = [0; 41];
+
     for (var t = 2; t <= 35; t += 1) {
-      if (t <= 17) this.trackoffset[t] = this.trackoffset[t - 1] + 21;
-      else if (t <= 24) this.trackoffset[t] = this.trackoffset[t - 1] + 19;
-      else if (t <= 30) this.trackoffset[t] = this.trackoffset[t - 1] + 18;
+      if (t <= 18) this.trackoffset[t] = this.trackoffset[t - 1] + 21;
+      else if (t <= 25) this.trackoffset[t] = this.trackoffset[t - 1] + 19;
+      else if (t <= 31) this.trackoffset[t] = this.trackoffset[t - 1] + 18;
       else this.trackoffset[t] = this.trackoffset[t - 1] + 17;
     }
 
@@ -26,17 +27,7 @@ class D64Writer {
   }
 
   getSectorOffset(track, sector) {
-    var totalSectors = 0;
-    /*
-    for (var t = 1; t < track; t += 1) {
-      if (t <= 17) totalSectors += 21;
-      else if (t <= 24) totalSectors += 19;
-      else if (t <= 30) totalSectors += 18;
-      else totalSectors += 17;
-    }
-    */
     return (this.trackoffset[track] + sector) * 256;
-    //return (totalSectors + sector) * 256;
   }
 
   getMaxSectors(track) {
@@ -68,6 +59,9 @@ class D64Writer {
     for (var i = 0; i  < 16; i += 1) {
       this.data[bamOffset + 144 + i] = (i < this.diskName.length()) ? this.diskName[i] : 160;
     }
+
+    this.data[bamOffset + 160] = 160;
+    this.data[bamOffset + 161] = 160;
     this.data[bamOffset + 162] = this.diskId[0];
     this.data[bamOffset + 163] = this.diskId[1];
     this.data[bamOffset + 164] = 160;
@@ -93,8 +87,10 @@ class D64Writer {
     var mask = 2 ** bitIdx;
 
     // clear bit (0 = allocated) and decrement track count
-    this.data[entryOff + 1 + byteIdx] = byteVal - mask;
-    this.data[entryOff] = this.data[entryOff] - 1;
+    if ((byteVal / mask).floor() % 2 == 1) {
+      this.data[entryOff + 1 + byteIdx] = byteVal - mask;
+      this.data[entryOff] = this.data[entryOff] - 1;
+    }
   }
 
   allocateNextFreeSector() {
@@ -122,12 +118,7 @@ class D64Writer {
           this.allocateSpecificSector(t, s);
 
           // apply standard 10-sector interleave for contiguous reads
-          this.allocator = (this.allocSector + 10) % maxSec;
-          if (this.allocSector == s) {
-            this.allocTrack += 1;
-            this.allocSector = 0;
-          }
-
+          this.allocSector = (s + 10) % maxSec;
           return [t, s];
         }
         this.allocSector += 1;
@@ -139,13 +130,14 @@ class D64Writer {
     System.exit(1);
   }
 
-  addPrgFile(c64Name, prgBytes, startAddr) {
-    var fullPayload = [];
-    fullPayload.push(startAddr % 256);
-    fullPayload.push((startAddr / 256).floor() % 256);
-    fullPayload = fullPayload + prgBytes;
+  addPrgFile(c64Name, prgBytes, startAddr = nil) {
+    var payload = prgBytes;
 
-    this.addRawFile(c64Name, fullPayload, 130); // 130 = $82 (prg)
+    if (startAddr != nil) {
+      payload = [startAddr % 256, (startAddr / 256).floor() % 256] + prgBytes;
+    }
+
+    this.addRawFile(c64Name, payload, 130); // 130 = $82 (prg)
   }
 
   // add raw seq data file (.seq)
@@ -155,7 +147,7 @@ class D64Writer {
 
   addRawFile(c64Name, payloadBytes, fileType) {
     var offset = 0;
-    var blocksUsed =  0;
+    var blocksUsed = 0;
     var firstTrack = 0;
     var firstSector = 0;
     var prevSecOffset = -1;
@@ -213,7 +205,7 @@ class D64Writer {
 
       this.currDirTrack = 18;
       this.currDirSector = newDirSec;
-      this.currDirSLot = 0;
+      this.currDirSlot = 0;
 
       var newDirOffset = this.getSectorOffset(18, newDirSec);
       this.data[newDirOffset] = 0;
@@ -263,69 +255,6 @@ class D64Writer {
   save(filepath) {
     return File.save(filepath, this.data.to_string());
   }
-
-  /*
-  save(prgBytes, prgStartAddr = nil, prgName = nil) {
-    var c64Name = (prgName ?? "PROGRAM".to_upper());
-
-    // 1. initialize bam (track 18, sector 0)
-    this.formatBAM();
-    
-    // 2. combine 2-byte load addresss + prg code bytes
-    var fullPayload = [];
-    fullPayload.push(prgStartAddr % 256);
-    fullPayload.push((prgStartAddr / 256).floor() % 256);
-    fullPayload = fullPayload + prgBytes;
-
-    // 3. write prg payload sectors starting at track 1, sector 0
-    var startTrack = 1;
-    var startSector = 0;
-    var currTrack = startTrack;
-    var currSector = startSector;
-
-    var offset = 0;
-    var blocksUsed = 0;
-
-    while (offset < fullPayload.length()) {
-      var remaining = fullPayload.length() - offset;
-      var sectorOffset = this.getSectorOffset(currTrack, currSector);
-      blocksUsed += 1;
-
-      if (remaining <= 254) {
-        // final sector: track = 0, sector = last byte offset + 1;
-        this.data[sectorOffset] = 0;
-        this.data[sectorOffset + 1] = remaining + 1;
-
-        for (var i = 0; i < remaining; i += 1) {
-          this.data[sectorOffset + 2 + i] = fullPayload[offset + i];
-        }
-        offset += remaining;
-      } else {
-        // next sector allocation (simple sequential track 1 sector allocation)
-        var nextTrack = currTrack;
-        var nextSector = currSector + 1;
-
-        this.data[sectorOffset] = nextTrack;
-        this.data[sectorOffset + 1] = nextSector;
-
-        for (var i = 0; i < 254; i += 1) {
-          this.data[sectorOffset + 2 + i] = fullPayload[offset + i];
-        }
-
-        offset += 254;
-        currTrack = nextTrack;
-        currSector = nextSector;
-      }
-    }
-
-    // 4. create directory entry on track 18, sector 1
-    this.writeDirectoryEntry(c64Name, startTrack, startSector, blocksUsed);
-
-    print this.filepath;
-    // 5. save d64 imagme to file
-    return File.save(this.filepath, this.data.to_string());
-  }
-  */
 
   formatBAM() {
     var bamOffset = this.getSectorOffset(18,0);

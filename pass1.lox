@@ -25,7 +25,7 @@ class Pass1 {
 
       // 2. origin directive (* = $0801)
       if (stmt.type == "ORIGIN") {
-        var avl = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
+        var val = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
         this.currenPC = val;
         stmt.pc = this.currentPC;
         stmt.size = 0;
