@@ -1,0 +1,21 @@
+class SymWriter {
+  init(filepath) {
+    this.filepath = filepath;
+  }
+
+  save(symbolTable) {
+    var content = "";
+    var keys = symbolTable.keys();
+
+    for (var i = 0; i < keys.length(); i += 1) {
+      var name = keys[i];
+      var addr = symbolTable[name];
+
+      if (isnumber(addr)) {
+        var hexAddr = Math.hex(addr, 4, false);
+        content = content + "al C:" + hexAddr + " ." + name + "\n";
+      }
+    }
+    return File.save(this.filepath, content);
+  }
+}

@@ -107,12 +107,46 @@ class Pass2 {
     if (isnumber(op)) {
       return op;
     }
+
+    var str = op;
+
+    // strip immediate '#' prefix if present
+    if (typeof(str) == "String" and str.length() > 0 and str[0] == '#') {
+      str = str.slice(1);
+    }
+
+    print "str: " + str;
+
+    //for (var i = 0; i < str.lengt(); i += 1) {
     // look up symbol in pass 1 table
     if (this.symbolTable.has(op)) {
       return this.symbolTable[op];
     }
 
     print "Error on line " + line + ": Undefined symbol '" + op + "'";
+    return nil;
+  }
+
+  resolveTerm(term, lineNum) {
+    if (term == "") return 0;
+
+    // 1. plain integer
+    if (isnumber(term)) return term;
+
+    // 2. hex
+    if (term[0] == '$') {
+      return Math.from_hex("0x" + term.slice(1));
+    }
+    if (term.length() >= 2 and term.slice(0, 2) == "0x") {
+      return Math.from_hex(term);
+    }
+
+    // 3. symbol table lookup
+    if (this.symbolTable.has(term)) {
+      return this.symbolTable[term];
+    }
+
+    print "Error: Undefined symbol " + term + "' on line " + lineNum;
     return nil;
   }
 

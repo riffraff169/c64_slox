@@ -153,6 +153,15 @@ class AssemblyScanner {
     return val;
   }
 
+  decimalNumber() {
+    while (isDigit(this.peek()))
+      this.advance();
+
+    var str = this.source.slice(this.start + 1, this.current);
+    var val = Number(str);
+    this.addToken(TokenType.NUMBER, val);
+  }
+
   hexNumber() {
     while (isHexDigit(this.peek())) {
       this.advance();

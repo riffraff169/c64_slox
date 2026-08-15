@@ -231,6 +231,27 @@ class AssemblyParser {
     return nil;
   }
 
+  parseOperandTokens(tokens, startIdx) {
+    var rawExpr = "";
+    var reg = nil;
+    var idx = startIdx;
+
+    while (idx < tokens.length()) {
+      var t = tokens[idx];
+
+      // stop at comma for indexed addressing (LABEL + 2, X)
+      if (t.type == TokenType.COMMA) {
+        if (idx + 1 < tokens.length()) {
+          reg = tokens[idx + 1].lexeme.to_upper();
+        }
+        break;
+      }
+      rawExpr = rawExpr + t.lexeme;
+      idx += 1;
+    }
+    return { "expression": rawExpr, "register": reg };
+  }
+
   processInclude(path, lineNum) {
     for (var i = 0; i < this.visitedFiles.length(); i += 1) {
       if (this.visitedFiles[i] == path) {
