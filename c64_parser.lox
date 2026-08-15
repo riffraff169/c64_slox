@@ -55,12 +55,36 @@ class AssemblyParser {
     var lineNum = lineTokens[0].line;
     var label = nil;
 
-    // 2. check for origin setting (* = $0801)
+    // 2a. check for origin setting (* = $0801)
     if (lineTokens.length() >= 3 and
         lineTokens[0].type == TokenType.STAR and
         lineTokens[1].type == TokenType.EQUAL) {
       var target = lineTokens[2].literal ?? lineTokens[2].lexeme;
       return Statement("ORIGIN", nil, "*=", AddressingMode.IMMEDIATE, target, lineNum);
+    }
+
+    // 2b. check for constant assignment: RASTER = $d012 or RASTER EQU $d012
+    if (lineTokens.length() >= 3) {
+      var opLexeme = lineTokens[1].lexeme.to_upper();
+
+      if (opLexeme == "=" or opLexeme == "EQU" or opLexeme == ".EQU") {
+        var symName = lineTokens[0].lexeme;
+        // strip option trailing ':'
+        if (symName[symName.length() -  1] == ':') {
+          symName = symName.slice(0, -1);
+        }
+
+        var valToken = lineTokens[2];
+        var val = valToken.literal ?? valToken.lexeme;
+
+        if (!isnumber(val) and typeof(val) == "String") {
+          if (val[0] == '$') {
+            val = Math.from_hex("0x" + val.slice(1));
+          }
+        }
+
+        return Statement("CONSTANT", symName, opLexeme, nil, val, lineNum);
+      }
     }
 
     // 3. check for label prefix (identifier followed by colon)
@@ -194,11 +218,13 @@ class AssemblyParser {
 
       var pathToken = lineTokens[idx];
       var path = pathToken.lexeme;
+      for (var i = idx + 1; i < lineTokens.length(); i += 1) {
+        path = path + lineTokens[i].lexeme;
+      }
 
       if (path[0] == '"') {
         path = path.slice(1, -1);
       }
-
       return this.processInclude(path, lineNum);
     }
 

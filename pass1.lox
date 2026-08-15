@@ -23,7 +23,11 @@ class Pass1 {
       stmt.pc = this.currentPC;
 
       // 2. calculate byte size and advance the pc
-      if (stmt.type == "ORIGIN") {
+      if (stmt.type == "CONSTANT") {
+        this.symbolTable[stmt.label] = stmt.operand;
+        stmt.pc = this.currentPC;
+        stmt.size = 0;
+      } else if (stmt.type == "ORIGIN") {
         this.currentPC = stmt.operand;
         stmt.pc = this.currentPC;
         stmt.size = 0;
