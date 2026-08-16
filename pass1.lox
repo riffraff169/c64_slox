@@ -46,14 +46,10 @@ class Pass1 {
 
       // 4. calculate byte size and advance the pc
       if (stmt.type == "INSTRUCTION") {
-        var size = this.calculateInstructionSize(stmt);
-        stmt.size = size;
-        this.currentPC += size;
-      } else if (stmt.type == "DIRECTIVE") {
         var dirName = stmt.name.to_upper();
 
         if (dirName == ".BASIC") {
-          this.currentPC = 2049; // $0801
+          this.currentPC = 2049; // $-8-1
           stmt.pc = this.currentPC;
           stmt.size = 13;
           this.currentPC += 13;
@@ -63,6 +59,7 @@ class Pass1 {
           this.currentPC += size;
         }
       } else if (stmt.type == "LABEL_ONLY") {
+        this.symbolTable[stmt.name] = this.currentPC;
         stmt.size = 0;
       }
     }

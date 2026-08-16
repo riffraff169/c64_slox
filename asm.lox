@@ -7,6 +7,7 @@ require("pass2.lox");
 require("prg_writer.lox");
 require("sym_writer.lox");
 require("d64_writer.lox");
+require("listing.lox");
 
 // 1. Configure CLI Parser
 var parser = ArgParser("slox asm.lox", "Assembles 6502 assembly source into a Commodore 64 .PRG file.");
@@ -15,6 +16,7 @@ parser.addFlag("verbose", "v", "Enable detailed assembly logs and symbol table d
 parser.addOption("output", "o", nil, "Path to output binary file (default: input name with .prg)", true);
 parser.addFlag("sym", "s", "Export VICE-compatible symbol map (.vs)");
 parser.addFlag("d64", "d", "Package executable into a blank .d64 disk image");
+parser.addFlag("lst", "l", "Write listing entries");
 
 // Use System.args (or ARGV depending on your VM environment)
 var parsed = parser.parse(System.ARGS);
@@ -79,7 +81,10 @@ if (verbose) {
 
 // 5. Pass 2: Machine Code Generation
 var pass2 = Pass2(pass1Result["statements"], symbolTable, OPCODES);
-var assembledBytes = pass2.run();
+var pass2Result = pass2.run();
+
+var assembledBytes = pass2Result["bytes"];
+var listingEntries = pass2Result["listingEntries"];
 
 // 6. Write .PRG File
 var startAddress = pass1Result["startAddress"] ?? 2049; // Default $0801
@@ -116,5 +121,16 @@ if (!!parsed.get("d64")) {
     print "D64 Disk Image written: " + d64File;
   } else {
     print "Error: Failed to write D64 disk image '" + d64File + "'";
+  }
+}
+
+if (!!parsed.get("lst")) {
+  var lstFile = outputFile.slice(0, -4) + ".lst";
+  var lstWriter = ListingWriter(lstFile);
+
+  if (lstWriter.save(listingEntries, symbolTable)) {
+    print "Listing file written: " + lstFile;
+  } else {
+    print "Error: failed to write listing file '" + lstFile + "'";
   }
 }

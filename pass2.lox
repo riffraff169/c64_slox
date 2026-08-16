@@ -1,25 +1,55 @@
 require("expr.lox");
 
 class Pass2 {
-  init(statements, symbolTable, opcodes) {
+  init(statements, symbolTable, opcodes, startAddress = 0x0801) {
     this.statements = statements;
     this.symbolTable = symbolTable;
     this.opcodes = opcodes;
+    this.currentAddress = startAddress;
     this.bytes = [];
   }
 
   run() {
+    var listingEntries = [];
+
     for (var i = 0; i < this.statements.length(); i += 1) {
       var stmt = this.statements[i];
 
+      // 1. capture address before assembling this statement
+      var addrBefore = this.currentAddress;
+      var lenBefore = this.bytes.length();
+
+      // 2. assemble statement
       if (stmt.type == "INSTRUCTION") {
         this.assembleInstruction(stmt);
       } else if (stmt.type == "DIRECTIVE") {
         this.assembleDirective(stmt);
       }
+
       // "ORIGIN" and "LABEL_ONLY" emit no output bytes directly
+
+      // 3. extract emitted bytes
+      var emittedBytes = [];
+      for (var b = lenBefore; b < this.bytes.length(); b += 1) {
+        emittedBytes.push(this.bytes[b]);
+      }
+
+      // 4. advance pass 2's current address counter
+      this.currentAddress += emittedBytes.length();
+
+      // 5. get source line text
+      listingEntries.push({
+          "line": stmt.line,
+          "address": stmt.pc,
+          "bytes": emittedBytes,
+          "source": stmt.line ?? ""
+          });
     }
-    return this.bytes;
+
+    return {
+      "bytes": this.bytes,
+      "listingEntries": listingEntries
+    };
   }
 
   assembleInstruction(stmt) {
@@ -121,7 +151,7 @@ class Pass2 {
     }
 
     var evaluator = ExpressionEvaluator();
-    return evaluator.evaluate(exprStr, this.symbolTable, pc);
+    return evaluator.evaluate(op, this.symbolTable, pc);
 
     // not reached
     if (isnumber(op)) {
