@@ -121,7 +121,7 @@ class Pass2 {
     }
 
     var evaluator = ExpressionEvaluator();
-    return evaluator.evaluate(op, this.symbolTable, pc);
+    return evaluator.evaluate(exprStr, this.symbolTable, pc);
 
     // not reached
     if (isnumber(op)) {
