@@ -53,6 +53,8 @@ if (source == nil) {
   System.exit(1);
 }
 
+var sourceLines = source.split("\n");
+
 if (verbose) print "--- [ Assembler Pipeline Start ] ---";
 if (verbose) print "Reading: " + inputFile;
 
@@ -74,14 +76,15 @@ if (verbose) {
   var keys = symbolTable.keys();
   for (var i = 0; i < keys.length(); i += 1) {
     var k = keys[i];
-    print "  " + k + " -> $" + Math.hex(symbolTable[k], 4, false);
+    if (k and k != "")
+      print "  " + k + " -> $" + Math.hex(symbolTable[k], 4, false);
   }
   print "";
 }
 
 // 5. Pass 2: Machine Code Generation
 var pass2 = Pass2(pass1Result["statements"], symbolTable, OPCODES);
-var pass2Result = pass2.run();
+var pass2Result = pass2.run(sourceLines);
 
 var assembledBytes = pass2Result["bytes"];
 var listingEntries = pass2Result["listingEntries"];

@@ -32,8 +32,8 @@ class Pass1 {
         continue;
       }
 
-      // 3. addres labels
-      if (stmt.label) {
+      // 3. address labels
+      if (stmt.label and stmt.label != "") {
         if (this.symbolTable.has(stmt.label)) {
           print "Error on line " + stmt.line + ": Duplicate label '" + stmt.label + "'";
         } else {
@@ -46,6 +46,10 @@ class Pass1 {
 
       // 4. calculate byte size and advance the pc
       if (stmt.type == "INSTRUCTION") {
+        var size = this.calculateInstructionSize(stmt);
+        stmt.size = size;
+        this.currentPC += size;
+      } else if (stmt.type == "DIRECTIVE") {
         var dirName = stmt.name.to_upper();
 
         if (dirName == ".BASIC") {

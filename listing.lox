@@ -59,12 +59,14 @@ class ListingWriter {
       var keys = symbolTable.keys();
       for (var k = 0; k < keys.length(); k += 1) {
         var name = keys[k];
-        var addr = Math.hex(symbolTable[name], 4, false);
-        lines.push(this.padRight(name, 24) + " = $" + addr);
+        if (name and name != "") {
+          var addr = Math.hex(symbolTable[name], 4, false);
+          lines.push(this.padRight(name, 24) + " = $" + addr);
+        }
       }
     }
 
-    var content = lines.join("\n");
+    var content = lines.join("\n") + "\n";
     return File.save(this.filepath, content);
   }
 }

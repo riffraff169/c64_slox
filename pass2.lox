@@ -9,7 +9,7 @@ class Pass2 {
     this.bytes = [];
   }
 
-  run() {
+  run(sourceLines) {
     var listingEntries = [];
 
     for (var i = 0; i < this.statements.length(); i += 1) {
@@ -37,12 +37,19 @@ class Pass2 {
       // 4. advance pass 2's current address counter
       this.currentAddress += emittedBytes.length();
 
+      var sourceText = "";
+      if (sourceLines and stmt.line <= sourceLines.length()) {
+        sourceText = sourceLines[stmt.line - 1];
+      } else {
+        sourceText = stmt.name ?? "";
+      }
+
       // 5. get source line text
       listingEntries.push({
           "line": stmt.line,
           "address": stmt.pc,
           "bytes": emittedBytes,
-          "source": stmt.line ?? ""
+          "source": sourceText
           });
     }
 

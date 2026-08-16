@@ -104,7 +104,7 @@ class AssemblyParser {
 
     // if line only contains a label
     if (idx >= lineTokens.length()) {
-      return Statement("LABEL_ONLY", label, "NOP", nil, nil, lineNum);
+      return Statement("LABEL_ONLY", label, "", nil, nil, lineNum);
     }
 
     if (lineTokens[idx].type == TokenType.DIRECTIVE) {
