@@ -1,0 +1,104 @@
+; ==================================================================
+; COMMODORE 64 STANDARD CONSTANTS & JUMP TABLE
+; ==================================================================
+
+; ------------------------------------------------------------------
+; KERNAL Jump Table Vectors ($FF81 - $FFF3)
+; ------------------------------------------------------------------
+CINT        = $ff81     ; Initialize screen editor & VIC-II
+IOINIT      = $ff84     ; Initialize CIA I/O devices
+RAMTAS      = $ff87     ; RAM test & initialize system pointers
+RESTOR      = $ff8d     ; Restore default I/O vectors
+VECTOR      = $ff8d     ; Read/set system vector table
+SETMSG      = $ff90     ; Control KERNAL error messages
+SECOND      = $ff93     ; Send secondary address after LISTEN
+TKSA        = $ff96     ; Send secondary address after TALK
+MEMTOP      = $ff99     ; Read/set top of RAM pointer
+MEMBOT      = $ff9c     ; Read/set bottom of RAM pointer
+SCNKEY      = $ff9f     ; Scan the keyboard matrix
+SETTMO      = $ffa2     ; Set IEEE timeout value
+ACPTR       = $ffa5     ; Read byte from IEEE bus
+CIOOUT      = $ffa8     ; Write byte to IEEE bus
+UNTLK       = $ffab     ; Command IEEE device to UNTALK
+UNLSN       = $ffac     ; Command IEEE device to UNLISTEN
+LISTEN      = $ffb1     ; Command IEEE device to LISTEN
+TALK        = $ffb4     ; Command IEEE device to TALK
+READST      = $ffb7     ; Read I/O status byte
+SETLFS      = $ffba     ; Set logical file parameters (A=LFN, X=DEV, Y=SA)
+SETNAM      = $ffbd     ; Set filename parameters (A=len, X/Y=ptr)
+OPEN        = $ffc0     ; Open logical channel
+CLOSE       = $ffc3     ; Close logical channel
+CHKIN       = $ffc6     ; Set channel for input (X = LFN)
+CHKOUT      = $ffc9     ; Set channel for output (X = LFN)
+CLRCHN      = $ffcc     ; Restore default input/output channels
+CHRIN       = $ffcf     ; Read character from input stream (BASIN)
+CHROUT      = $ffd2     ; Write character to output stream (BSOUT)
+LOAD        = $ffd5     ; Load memory from device
+SAVE        = $ffd8     ; Save memory to device
+SETTIM      = $ffdb     ; Set 24-hour clock (A/X/Y)
+RDTIM       = $ffde     ; Read 24-hour clock (A/X/Y)
+STOP        = $ffe1     ; Check STOP key status
+GETIN       = $ffe4     ; Get character from keyboard buffer / device
+CLALL       = $ffe7     ; Close all channels and files
+UDTIM       = $ffea     ; Increment 24-hour clock
+SCREEN      = $ffed     ; Read screen organization (X=cols, Y=rows)
+PLOT        = $fff0     ; Read/set cursor position (C=0 set, C=1 read)
+IOBASE      = $fff3     ; Get I/O page base address ($D000)
+
+; ------------------------------------------------------------------
+; VIC-II Video Controller ($D000 - $D02E)
+; ------------------------------------------------------------------
+VIC_SP0X    = $d000     ; Sprite 0 X Coordinate
+VIC_SP0Y    = $d001     ; Sprite 0 Y Coordinate
+VIC_MSBX    = $d010     ; Sprites 0-7 X Most Significant Bit
+VIC_CR1     = $d011     ; Control Register 1 (Bit 7 = Raster Bit 8)
+VIC_RASTER  = $d012     ; Raster Line Counter
+VIC_LPX     = $d013     ; Light Pen X Position
+VIC_LPY     = $d014     ; Light Pen Y Position
+VIC_SPENA   = $d015     ; Sprite Enable Register
+VIC_CR2     = $d016     ; Control Register 2
+VIC_YEXP    = $d017     ; Sprite Y Expand
+VIC_MEMORY  = $d018     ; Memory Setup Register (Screen/Charset matrix)
+VIC_IRQ     = $d019     ; Interrupt Flag Register
+VIC_IRQMASK = $d01a     ; Interrupt Mask Register
+VIC_SPBGPR  = $d01b     ; Sprite / Background Priority
+VIC_SPMC    = $d01c     ; Sprite Multicolor Mode
+VIC_XEXP    = $d01d     ; Sprite X Expand
+VIC_BORDER  = $d020     ; Border Color
+VIC_BGCOL0  = $d021     ; Background Color 0
+VIC_BGCOL1  = $d022     ; Background Color 1
+VIC_BGCOL2  = $d023     ; Background Color 2
+VIC_BGCOL3  = $d024     ; Background Color 3
+
+; ------------------------------------------------------------------
+; System Hardware Vectors & Memory Registers
+; ------------------------------------------------------------------
+RAM_IRQVEC  = $0314     ; Hardware IRQ interrupt vector ($EA31)
+RAM_BRKVEC  = $0316     ; Software BRK interrupt vector ($FE66)
+RAM_NMIVEC  = $0318     ; NMI interrupt vector ($FE47)
+CPU_PORT    = $0001     ; 6510 Processor I/O Port (Memory banking)
+CIA1_PRA    = $dc00     ; CIA 1 Port A (Keyboard matrix / Joysticks)
+CIA1_PRB    = $dc01     ; CIA 1 Port B (Keyboard matrix / Joysticks)
+CIA1_ICR    = $dc0d     ; CIA 1 Interrupt Control Register
+CIA2_PRA    = $dd00     ; CIA 2 Port A (VIC bank selection)
+CIA2_ICR    = $dd0d     ; CIA 2 Interrupt Control Register
+
+; ------------------------------------------------------------------
+; VIC-II Color Constants ($00 - $0F)
+; ------------------------------------------------------------------
+COLOR_BLACK       = $00
+COLOR_WHITE       = $01
+COLOR_RED         = $02
+COLOR_CYAN        = $03
+COLOR_PURPLE      = $04
+COLOR_GREEN       = $05
+COLOR_BLUE        = $06
+COLOR_YELLOW      = $07
+COLOR_ORANGE      = $08
+COLOR_BROWN       = $09
+COLOR_LIGHTRED    = $0a
+COLOR_DARKGRAY    = $0b
+COLOR_MEDIUMGRAY  = $0c
+COLOR_LIGHTGREEN  = $0d
+COLOR_LIGHTBLUE   = $0e
+COLOR_LIGHTGRAY   = $0f
