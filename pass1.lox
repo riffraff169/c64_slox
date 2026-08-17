@@ -57,6 +57,22 @@ class Pass1 {
           stmt.pc = this.currentPC;
           stmt.size = 13;
           this.currentPC += 13;
+        } else if (dirName == ".ALIGN") {
+          var boundary = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
+          if (boundary <= 0) boundary = 1;
+
+          var remainder = this.currentPC % boundary;
+          var padding = (remainder == 0) ? 0 : (boundary - remainder);
+
+          stmt.pc = this.currentPC;
+          stmt.size = padding;
+          this.currentPC += padding;
+        } else if (dirName == ".FILL") {
+          var count = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
+
+          stmt.pc = this.currentPC;
+          stmt.size = count;
+          this.currentPC += count;
         } else {
           var size = this.calculateDirectiveSize(stmt);
           stmt.size = size;
@@ -159,16 +175,28 @@ class Pass1 {
   }
 
   calculateDirectiveSize(stmt) {
-    if (stmt.name.to_upper() == ".BYTE") {
+    var name = stmt.name.to_upper();
+
+    if (name == ".BYTE") {
       if (typeof(stmt.operand) == "Array") return stmt.operand.length();
       return 1;
     }
-    if (stmt.name.to_upper() == ".WORD") {
+    if (name == ".WORD") {
       if (typeof(stmt.operand) == "Array") return stmt.operand.length() * 2;
       return 2;
     }
-    if (stmt.name.to_upper() == ".TEXT" or stmt.name.to_upper() == ".STRING") {
+    if (name == ".TEXT" or stmt.name.to_upper() == ".STRING") {
       return stmt.operand.length();
+    }
+    if (name == ".ALIGN") {
+      var boundary = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
+      if (boundary <= 0) boundary = 1;
+      var remainder = currentPC % boundary;
+      return (remainder == 0) ? 0 : (boundary - remainder);
+    }
+    if (name == ".FILL") {
+      return evaluator.evaluate(stmt.operand, this.symbolTable, currentPC);
+      return count;
     }
     return 0;
   }

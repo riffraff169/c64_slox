@@ -143,7 +143,19 @@ class Pass2 {
         // convert char string to byte index
         this.emitByte(str[i]);
       }
-    } 
+    } else if (stmt.name.to_upper() == ".ALIGN") {
+      for (var i = 0; i < stmt.size; i += 1) {
+        this.emitByte(0x00);
+      }
+    } else if (stmt.name.to_upper() == ".FILL") {
+      var fillVal = 0x00;
+      if (stmt.fillValExpr and stmt.fillValExpr != "") {
+        fillVal = this.resolveOperand(stmt.fillValExpr, currentPC, stmt.line) ?? 0x00;
+      }
+      for (var i = 0; i < stmt.size; i += 1) {
+        this.emitByte(fillVal & 0xff);
+      }
+    }
   }
 
   resolveOperand(op, pc, line) {

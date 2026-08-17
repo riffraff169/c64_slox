@@ -230,6 +230,14 @@ class AssemblyParser {
     return str;
   }
 
+  parseDirectiveArgs(tokens, startIdx) {
+    var raw = "";
+    for (var i = startIdx; i < tokens.length(); i += 1) {
+      raw = raw + tokens[i].lexeme;
+    }
+    return raw.trim();
+  }
+
   parseDirective(lineTokens, startIdx, label, lineNum) {
     var dirToken = lineTokens[startIdx];
     var dirName = dirToken.lexeme.to_upper();
@@ -281,6 +289,29 @@ class AssemblyParser {
         path = path.slice(1, -1);
       }
       return this.processInclude(path, lineNum);
+    }
+
+    if (dirName == ".ALIGN") {
+      // .align $0800 or .align 64
+      var argStr = this.parseDirectiveArgs(lineTokens, idx);
+      return Statement("DIRECTIVE", label, dirName, nil, argStr, lineNum);
+    }
+
+    if (dirName == ".FILL") {
+      // .fill 64, $ff or .fill 64 (defaults fill byte to $00)
+      var argStr = this.parseDirectiveArgs(lineTokens, idx);
+      var countExpr = argStr;
+      var fillExpr = "$00";
+
+      var commaIdx = argStr.find(",");
+      if (commaIdx) {
+        countExpr = argStr.slice(0, commaIdx).trim();
+        fillExpr = argStr.slice(commaIdx + 1).trim();
+      }
+
+      var stmt = Statement("DIRECTIVE", label, dirName, nil, countExpr, lineNum);
+      stmt.fillValExpr = fillExpr;
+      return stmt;
     }
 
     return nil;
