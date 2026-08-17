@@ -6,6 +6,7 @@ class Pass1 {
     this.opcodes = opcodes;
     this.symbolTable = {};
     this.currentPC = 0x0801;
+    this.hasOrigin = false;
   }
 
   run() {
@@ -25,10 +26,15 @@ class Pass1 {
 
       // 2. origin directive (* = $0801)
       if (stmt.type == "ORIGIN") {
+        if (this.hasOrigin) {
+          print "Error on line " + stmt.line + ": Multiple origin (* =) directives are not supported in single PRG mode.";
+          return;
+        }
         var val = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
         this.currenPC = val;
         stmt.pc = this.currentPC;
         stmt.size = 0;
+        this.hasOrigin = true;
         continue;
       }
 
