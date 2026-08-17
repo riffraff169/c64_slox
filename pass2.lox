@@ -155,6 +155,12 @@ class Pass2 {
       for (var i = 0; i < stmt.size; i += 1) {
         this.emitByte(fillVal & 0xff);
       }
+    } else if (name == ".INCBIN" or name == ".INCLUDEBIN") {
+      if (stmt.binaryData) {
+        for (var i = 0; i < stmt.binaryData.length(); i += 1) {
+          this.emitByte(stmt.binaryData[i]);
+        }
+      }
     }
   }
 

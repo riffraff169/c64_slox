@@ -22,7 +22,6 @@ class Statement {
     this.mode = mode;   // AddressingMode constant
     this.operand = operand; // raw expression / value / symbol
     this.line = line;
-    //this.fillValExpr = 0;
   }
 
   to_string() {

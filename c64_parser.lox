@@ -314,6 +314,35 @@ class AssemblyParser {
       return stmt;
     }
 
+    if (dirName == ".INCBIN" or dirName == ".INCLUDEBIN") {
+      var argStr = this.parseDirectiveArgs(lineTokens, idx);
+      var filename = argStr;
+      var offsetExpr = nil;
+      var lengthExpr = nil;
+
+      var comma1 = argStr.find(",");
+      if (comma1) {
+        filename = argStr.slice(0, comma1).trim();
+        var rest = argStr.slice(comma1 + 1).trim();
+        var comma2 = rest.find(",");
+        if (comma2) {
+          offsetExpr = rest.slice(0, comma2).trim();
+          lengthExpr = rest.slice(comma2 + 1).trim();
+        } else {
+          offsetExpr = rest;
+        }
+      }
+
+      if (filename.length() >= 2 and filename[0] == "\"" and filename[filename.length() - 1] == "\"") {
+        filename = filename.slice(1, filename.length() -1);
+      }
+
+      var stmt = Statement("DIRECTIVE", label, dirName, nil, filename, lineNum);
+      stmt.offsetExpr = offsetExpr;
+      stmt.lengthExpr = lengthExpr;
+      return stmt;
+    }
+
     return nil;
   }
 

@@ -175,6 +175,7 @@ class Pass1 {
   }
 
   calculateDirectiveSize(stmt) {
+    var evaluator = ExpressionEvaluator();
     var name = stmt.name.to_upper();
 
     if (name == ".BYTE") {
@@ -198,6 +199,48 @@ class Pass1 {
       return evaluator.evaluate(stmt.operand, this.symbolTable, currentPC);
       return count;
     }
+
+    if (name == ".INCBIN" or name == ".INCLUDEBIN") {
+      var fileContent = File.load(stmt.operand);
+      if (fileContent == nil) {
+        print "Error on line " + stmt.line + ": Cannot open binary file '" + stmt.operand + "'";
+        return 0;
+      }
+
+      var fileLen = fileContent.length();
+      var offset = 0;
+
+      if (stmt.offsetExpr and stmt.offsetExpr != "") {
+        offset = evaluator.evaluate(stmt.offsetExpr, this.symbolTable, this.currentPC);
+      }
+
+      var count = fileLen - offset;
+      if (stmt.lengthExpr and stmt.lengthExpr != "") {
+        count = evaluator.evaluate(stmt.lengthExpr, this.symbolTable, this.currentPC);
+      }
+
+      if (offset >= fileLen or count <= 0) {
+        stmt.binaryData = [];
+        return 0;
+      }
+
+      // clamp valid read range within file bounds
+      var endPos = offset + count;
+      if (endPos > fileLen) endPos = fileLen;
+      var slicedStr = fileContent.slice(offset, endPos);
+
+      var bytes = slicedStr.split("").map(fun(w) { return w[0]; });
+
+      // pad
+      var padCount = count - bytes.length();
+      if (padCount > 0) {
+        bytes = bytes + [0; padCount];
+      }
+        
+      stmt.binaryData = bytes;
+      return bytes.length();
+    }
+
     return 0;
   }
 }
