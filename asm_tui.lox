@@ -1,0 +1,324 @@
+#!/usr/bin/env slox
+import "notcurses";
+
+class C64AssemblerTUI {
+  init() {
+    this.nc = Notcurses();
+    this.stdp = this.nc.get_stdplane();
+    this.check_and_update_dims(true);
+    //this.clear_root_plane();
+
+    this.files = this.scan_a64_files();
+    this.file_idx = 0;
+    this.file_top_idx = 0;
+
+    this.opt_symbols = false;
+    this.opt_d64 = false;
+    this.opt_listing = false;
+
+    // ui state navigation: 0 = file list, 1 = options list, 2 = execute button
+    this.focus = 0;
+    this.option_idx = 0; // 0: -s, 1: -d, 2: -l
+
+    this.status_msg = "Ready.";
+    this.console_lines = [];
+    this.console_scroll_offset = 0;
+
+    this.setup_planes();
+  }
+
+  get_terminal_dimensions() {
+    var dimstr = Process.capture("stty size 2>/dev/null");
+    var dimarr = dimstr.unwrap().split(" ");
+    var r = Number(dimarr[0]);
+    var c = Number(dimarr[1]);
+    return [r, c];
+  }
+
+  check_and_update_dims(force_clear) {
+    var dims = this.get_terminal_dimensions();
+    var rows = dims[0];
+    var cols = dims[1];
+
+    if (force_clear or rows != this.curr_rows or cols != this.curr_cols) {
+      this.curr_rows = rows;
+      this.curr_cols = cols;
+      this.clear_root_plane();
+    }
+  }
+
+  clear_root_plane() {
+    this.stdp.set_bgrgb(15, 23, 42); // dark slate background
+    this.stdp.set_fgrgb(15, 23, 42);
+
+    var blank_row = [" "; this.curr_cols].join("");
+    for (var r = 0; r < this.curr_rows; r += 1) {
+      this.stdp.put_str(r, 0, blank_row);
+    }
+  }
+
+  scan_a64_files() {
+    return Dir.glob("*.a64");
+  }
+
+  setup_planes() {
+    // header
+    this.header = this.stdp.create_child(0, 0, 3, 76);
+    this.header.erase();
+    this.header.set_bgrgb(15, 23, 42);
+    this.header.set_fgrgb(56,189,248);
+    this.header.box();
+    this.header.put_str_aligned(1, "center", "C64 ASSEMBLER TUI FRONTEND");
+
+    // file selector panel
+    this.file_win = this.stdp.create_child(3, 0, 11, 36);
+
+    // options panel
+    this.opt_win = this.stdp.create_child(3, 37, 11, 39);
+
+    // scrolling console panel (10 rows high at bottom)
+    this.console_win = this.stdp.create_child(14, 0, 10, 76);
+  }
+
+  update_file_scroll() {
+    var visible_rows = 7; // usable vertical rows inside file box
+    if (this.files.length() == 0) return;
+
+    if (this.file_idx < this.file_top_idx) {
+      this.file_top_idx = this.file_idx;
+    } else if (this.file_idx >= this.file_top_idx + visible_rows) {
+      this.file_top_idx = this.file_idx - visible_rows + 1;
+    }
+  }
+
+  render() {
+    this.check_and_update_dims(false);
+    this.render_files();
+    this.render_options();
+    this.render_console();
+    this.nc.render();
+  }
+  
+  render_files() {
+    this.file_win.erase();
+    this.file_win.set_bgrgb(30, 41, 59);
+
+    if (this.focus == 0) {
+      this.file_win.set_fgrgb(250, 204, 21); // active yellow
+    } else {
+      this.file_win.set_fgrgb(148, 163, 184);
+    }
+    this.file_win.box();
+
+    var file_count_str = " [ Source Files (" + this.files.length() + ") ] ";
+    this.file_win.put_str(0, 2, file_count_str);
+
+    if (this.files.length() == 0) {
+      this.file_win.set_fgrgb(239, 68, 68);
+      this.file_win.put_str(2, 2, "No .a64 files found.");
+      return;
+    }
+
+    var visible_rows = 7;
+    for (var i = 0; i < visible_rows; i += 1) {
+      var idx = this.file_top_idx + i;
+      if (idx >= this.files.length()) break;
+
+      var row = i + 2;
+      if (idx == this.file_idx) {
+        this.file_win.set_bgrgb(56, 189, 248);
+        this.file_win.set_fgrgb(15, 23, 42);
+        this.file_win.put_str(row, 2, " > " + this.files[idx] + " ");
+      } else {
+        this.file_win.set_bgrgb(30, 41, 59);
+        this.file_win.set_fgrgb(226, 232, 240);
+        this.file_win.put_str(row, 2, "   " + this.files[idx] + " ");
+      }
+    }
+  }
+
+  render_options() {
+    this.opt_win.erase();
+    this.opt_win.set_bgrgb(30, 41, 59);
+    if (this.focus == 1 or this.focus == 2) {
+      this.opt_win.set_fgrgb(250,204,21);
+    } else {
+      this.opt_win.set_fgrgb(148, 163, 184);
+    }
+
+    this.opt_win.box();
+    this.opt_win.put_str(0, 2, " [ Build Options ] ");
+
+    var opts = [
+      ["-s  Export VICE Symbol Map", this.opt_symbols],
+      ["-d  Package into D64 Disk", this.opt_d64],
+      ["-l  Write Assembly Listing", this.opt_listing]
+    ];
+
+    for (var i = 0; i < opts.length(); i += 1) {
+      var row = i * 2 + 2;
+      var checked = opts[i][1] ? "[X] " : "[ ] ";
+
+      this.opt_win.set_bgrgb(30, 41, 59);
+      if (this.focus == 1 and this.option_idx == i) {
+        this.opt_win.set_fgrgb(56, 189, 248);
+        this.opt_win.put_str(row, 2, "> " + checked + opts[i][0]);
+      } else {
+        this.opt_win.set_fgrgb(226, 232, 240);
+        this.opt_win.put_str(row, 2, "  " + checked + opts[i][0]);
+      }
+    }
+
+    var btn_row = 8;
+    if (this.focus == 2) {
+      this.opt_win.set_bgrgb(34, 197, 94);
+      this.opt_win.set_fgrgb(15, 23, 42);
+      this.opt_win.put_str_aligned(btn_row, "center", " [ BUILD EXECUTABLE ] ");
+    } else {
+      this.opt_win.set_bgrgb(15, 23, 42);
+      this.opt_win.set_fgrgb(34, 197, 94);
+      this.opt_win.put_str_aligned(btn_row, "center", "   BUILD EXECUTABLE   ");
+    }
+  }
+
+  render_console() {
+    this.console_win.erase();
+    this.console_win.set_bgrgb(15, 23, 42);
+    this.console_win.set_fgrgb(148, 163, 184);
+    this.console_win.box();
+    //this.console_win.put_str(0, 2, " [ Output Console ] ");
+
+    var visible_rows = 8;
+    var total_lines = this.console_lines.length();
+    var max_scroll = total_lines > visible_rows ? total_lines - visible_rows : 0;
+
+    if (this.console_scroll_offset > max_scroll) {
+      this.console_scroll_offset = max_scroll;
+    }
+    if (this.console_scroll_offset < 0) {
+      this.console_scroll_offset = 0;
+    }
+
+    var header_title = " [ Console Output ] ";
+    if (this.console_scroll_offset > 0) {
+      header_title = " [ Console Output (Scrolled +" + this.console_scroll_offset + " lines) ] ";
+    }
+    this.console_win.put_str(0, 2, header_title);
+
+    // auto scroll
+    var start_idx = max_scroll - this.console_scroll_offset;
+
+    /*
+    if (total_lines > visible_rows) {
+      start_idx = total_lines - visible_rows;
+    }
+    */
+
+    this.console_win.set_fgrgb(241, 245, 249);
+    for (var i = 0; i < visible_rows and (start_idx + i) < total_lines; i += 1) {
+      var line = this.console_lines[start_idx + i];
+      this.console_win.put_str(i + 1, 2, line);
+    }
+  }
+
+  run_assembler() {
+    if (this.files.length() == 0) return;
+
+    this.console_scroll_offset = 0;
+
+    var target = this.files[this.file_idx];
+    var flags = "";
+    if (this.opt_symbols) flags = flags + " -s";
+    if (this.opt_d64) flags = flags + " -d";
+    if (this.opt_listing) flags = flags + " -l";
+
+    var cmd = "./asm.lox" + flags + " " + target + " 2>&1";;
+
+    this.console_lines.push("------------------------------------------------------------------------");
+    this.console_lines.push("Running: " + cmd);
+    this.render_console();
+    this.nc.render();
+
+    var pipe = Process.popen(cmd);
+    if (pipe) {
+      while (true) {
+        var line = pipe.read_line();
+        if (line == nil) break;
+
+        if (line.length > 0 and line[line.length() - 1] == '\n') {
+          line = line.slice(0, line.length() - 1);
+        }
+
+        this.console_lines.push(line);
+        this.render_console();
+        this.nc.render();
+      }
+      pipe.close();
+      this.console_lines.push("Status: Process finished.");
+      this.render_console();
+      this.nc.render();
+    }
+  }
+
+  loop() {
+    this.render();
+    var running = true;
+
+    while (running) {
+      var key = this.nc.get_key();
+
+      if (key == "q") {
+        running = false;
+      } else if (key == "Tab") {
+        this.focus = (this.focus + 1) % 3;
+        this.render();
+      } else if (key == "Right" or key == "l") {
+        if (this.focus == 0) this.focus = 1;
+        this.render();
+      } else if (key == "Left" or key == "h") {
+        if (this.focus == 1 or this.focus == 2) this.focus = 0;
+        this.render();
+      } else if (key == "Up" or key == "k") {
+        if (this.focus == 0) {
+          if (this.file_idx > 0) {
+            this.file_idx = this.file_idx - 1;
+            this.update_file_scroll();
+          }
+        } else if (this.focus == 1) {
+          if (this.option_idx > 0) this.option_idx = this.option_idx - 1;
+        } else if (this.focus == 2) {
+          this.focus = 1;
+          this.option_idx = 2;
+        }
+        this.render();
+      } else if (key == "Down" or key == "j") {
+        if (this.focus == 0) {
+          if (this.file_idx < this.files.length() - 1) {
+            this.file_idx = this.file_idx + 1;
+            this.update_file_scroll();
+          }
+        } else if (this.focus == 1) {
+          if (this.option_idx < 2) {
+            this.option_idx = this.option_idx + 1;
+          } else {
+            this.focus = 2;
+          }
+        }
+        this.render();
+      } else if (key == " ") {
+        if (this.focus == 1) {
+          if (this.option_idx == 0) this.opt_symbols = !this.opt_symbols;
+          if (this.option_idx == 1) this.opt_d64 = !this.opt_d64;
+          if (this.option_idx == 2) this.opt_listing = !this.opt_listing;
+          this.render();
+        }
+      } else if (key == "Enter") {
+        this.run_assembler();
+      }
+    }
+    this.nc.stop();
+  }
+}
+
+var app = C64AssemblerTUI();
+app.loop();
