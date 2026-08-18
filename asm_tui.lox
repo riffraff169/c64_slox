@@ -208,12 +208,6 @@ class C64AssemblerTUI {
     // auto scroll
     var start_idx = max_scroll - this.console_scroll_offset;
 
-    /*
-    if (total_lines > visible_rows) {
-      start_idx = total_lines - visible_rows;
-    }
-    */
-
     this.console_win.set_fgrgb(241, 245, 249);
     for (var i = 0; i < visible_rows and (start_idx + i) < total_lines; i += 1) {
       var line = this.console_lines[start_idx + i];
@@ -242,10 +236,11 @@ class C64AssemblerTUI {
     var pipe = Process.popen(cmd);
     if (pipe) {
       while (true) {
-        var line = pipe.read_line();
-        if (line == nil) break;
+        var lineres = pipe.readline();
+        if (!lineres) break;
+        var line = lineres.unwrap();
 
-        if (line.length > 0 and line[line.length() - 1] == '\n') {
+        if (line.length() > 0 and line[line.length() - 1] == '\n') {
           line = line.slice(0, line.length() - 1);
         }
 

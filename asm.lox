@@ -116,7 +116,7 @@ if (!!parsed.get("sym")) {
 
 if (!!parsed.get("d64")) {
   var d64File = inputFile.slice(0, -4) + ".d64";
-  var d64Writer = D64Writer(d64File, intputFile.slice(0, -4), "2A");
+  var d64Writer = D64Writer(d64File, inputFile.slice(0, -4), "2A");
 
   var prgName = inputFile.slice(0, -4);
   d64Writer.addPrgFile(prgName, assembledBytes, startAddress); 
