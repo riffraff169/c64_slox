@@ -16,7 +16,7 @@ class C64AssemblerTUI {
     this.opt_d64 = false;
     this.opt_listing = false;
 
-    // ui state navigation: 0 = file list, 1 = options list, 2 = execute button
+    // ui state navigation: 0 = file list, 1 = options list, 2 = execute button, 3 = console
     this.focus = 0;
     this.option_idx = 0; // 0: -s, 1: -d, 2: -l
 
@@ -184,9 +184,13 @@ class C64AssemblerTUI {
   render_console() {
     this.console_win.erase();
     this.console_win.set_bgrgb(15, 23, 42);
-    this.console_win.set_fgrgb(148, 163, 184);
+
+    if (this.focus == 3) {
+      this.console_win.set_fgrgb(250, 204, 21); // active yellow border
+    } else {
+      this.console_win.set_fgrgb(148, 163, 184); // inactive slate border
+    }
     this.console_win.box();
-    //this.console_win.put_str(0, 2, " [ Output Console ] ");
 
     var visible_rows = 8;
     var total_lines = this.console_lines.length();
@@ -265,7 +269,7 @@ class C64AssemblerTUI {
       if (key == "q") {
         running = false;
       } else if (key == "Tab") {
-        this.focus = (this.focus + 1) % 3;
+        this.focus = (this.focus + 1) % 4;
         this.render();
       } else if (key == "Right" or key == "l") {
         if (this.focus == 0) this.focus = 1;
@@ -284,6 +288,8 @@ class C64AssemblerTUI {
         } else if (this.focus == 2) {
           this.focus = 1;
           this.option_idx = 2;
+        } else if (this.focus == 3) {
+          this.console_scroll_offset += 1;
         }
         this.render();
       } else if (key == "Down" or key == "j") {
@@ -298,6 +304,21 @@ class C64AssemblerTUI {
           } else {
             this.focus = 2;
           }
+        } else if (this.focus == 2) {
+          this.focus = 3;
+        } else if (this.focus == 3) {
+          this.console_scroll_offset -= 1;
+        }
+        this.render();
+      } else if (key == "PageDown") {
+        if (this.focus == 0) {
+          this.file_idx += 5;
+          if (this.file_idx >= this.files.length()) {
+            this.file_idx = this.files.length() - 1;
+          }
+          this.update_file_scroll();
+        } else if (this.focus == 3) {
+          this.console_scroll_offset -= 5;
         }
         this.render();
       } else if (key == " ") {
