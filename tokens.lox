@@ -8,6 +8,8 @@ class TokenType {
   const STAR = "STAR";
   const PLUS = "PLUS";
   const MINUS = "MINUS";
+  const LESS = "LESS";
+  const GREATER = "GREATER";
 
   const IDENTIFIER = "IDENTIFIER"; // mnemonics, labels, register (A, X, Y)
   const NUMBER = "NUMBER"; // decimal, hex ($), binary (%)

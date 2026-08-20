@@ -1,14 +1,37 @@
+//require("logger.lox");
 require("c64_parser.lox");
 require("tokens.lox");
 
 class AssemblyScanner {
-  init(source) {
+  init(source, logger = nil) {
     this.source = source;
+    this.logger = logger;
     this.tokens = [];
     this.len = (source == nil) ? 0 : source.length();
     this.start = 0;
     this.current = 0;
     this.line = 1;
+  }
+
+  // logging helpers
+  logDebug(msg) {
+    if (this.logger)
+      this.logger.debug(msg);
+  }
+
+  logInfo(msg) {
+    if (this.logger)
+      this.logger.info(msg);
+  }
+
+  logWarn(msg) {
+    if (this.logger)
+      this.logger.warn(msg);
+  }
+
+  logError(msg) {
+    if (this.logger)
+      this.logger.error(msg);
   }
 
   isAtEnd() {
@@ -32,12 +55,15 @@ class AssemblyScanner {
   }
 
   scanTokens() {
+    this.logDebug("Starting scan phase (" + this.len + " characters)...");
+
     while (!this.isAtEnd()) {
       this.start = this.current;
       this.scanToken();
     }
 
     this.tokens.push(Token(TokenType.EOF_TOKEN, "", nil, this.line));
+    this.logInfo("Scanning completed: " + this.tokens.length() + " tokens scanned.");
     return this.tokens;
   }
 
@@ -72,6 +98,8 @@ class AssemblyScanner {
     if (c == '*') return this.addToken(TokenType.STAR, nil);
     if (c == '+') return this.addToken(TokenType.PLUS, "+");
     if (c == '-') return this.addToken(TokenType.MINUS, "-");
+    if (c == '<') return this.addToken(TokenType.LESS, "-");
+    if (c == '>') return this.addToken(TokenType.GREATER, "-");
     if (c == '"') return;
 
     // directives (.byte, .word, .org)
@@ -104,7 +132,7 @@ class AssemblyScanner {
       return;
     }
 
-    print "Error on line " + this.line + ": Unexpected character '" + c + "'";
+    this.logError("Line: " + this.line + ": Unexpected character '" + c + "'");
   }
 
   // helpers & matchers
@@ -114,6 +142,9 @@ class AssemblyScanner {
       this.advance();
     }
     var text = this.source.slice(this.start, this.current);
+    if (text.length() == 1) {
+      this.logWarn("Line " + this.line + ": Empty directive '.' encountered.");
+    }
     this.addToken(TokenType.DIRECTIVE, text.to_upper());
   }
     
@@ -173,6 +204,16 @@ class AssemblyScanner {
     this.addToken(TokenType.NUMBER, val);
   }
 
+  binaryNumber() {
+    while (this.peek() == '0' or this.peek() == '1') {
+      this.advance();
+    }
+
+    var text = this.source.slice(this.start + 1, this.current);
+    var val = Math.from_bin(text);
+    this.addToken(TokenType.NUMBER, val);
+  }
+
   identifier() {
     while (isAlphaNumeric(this.peek())) {
       this.advance();
@@ -183,52 +224,10 @@ class AssemblyScanner {
 
   addToken(type, literal) {
     var text = this.source.slice(this.start, this.current);
-    this.tokens.push(Token(type, text, literal, this.line));
+    var token = Token(type, text, literal, this.line);
+    this.tokens.push(token);
+    var debugText = (type == TokenType.NEWLINE) ? "\\n" : text;
+    this.logDebug("Token added: Token(" + String(type) + ", '" + debugText + "', " + String(literal) + ", line " + String(this.line) + ")");
   }
-
-  /*
-  scanLine() {
-    var tokens = [];
-    while (!this.isAtEnd() && this.peek() != "\n") {
-      this.start = this.current;
-      var c = this.advance();
-
-      if (c == ' ' or c == '\t' or c == '\r') {
-        // skip
-      } else if (c == ';') {
-        while (!this.isAtEnd() and this.peek() != '\n') {
-          this.advance();
-        }
-      } else if (c == '#') {
-        tokens.add(this.makeToken("HASH", "#"));
-      } else if (c == ',') {
-        tokens.add(this.makeToken("COMMA", ","));
-      } else if (c == '(') {
-        tokens.add(this.makeToken("LPAREN", "("));
-      } else if (c == ')') {
-        tokens.add(this.makeToken("RPAREN", ")"));
-      } else if (c == '=') {
-        tokens.add(this.makeToken("EQUAL", "="));
-      } else if (c == '*') {
-        tokens.add(this.makeToken("STAR", "*"));
-      } else if (c == ':') {
-        tokens.add(this.makeToken("COLON", ":"));
-      } else if (this.isAlpha(c) or c == '.' or c == '$' or c == '%' or c == '_') {
-        tokens.add(this.identifierOrLiteral(c));
-      } else if (this.isDigit(c)) {
-        tokens.add(this.numberLiteral());
-      }
-    }
-
-    if (!this.isAtEnd() and this.peek() == '\n') {
-      this.advance();
-      this.line = this.line + 1;
-    }
-
-    return tokens;
-  }
-  */
-
-
 }
 

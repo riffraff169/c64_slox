@@ -3,8 +3,9 @@ require("mode.lox");
 class AssemblyParser {
   const branchOpcodes = ["BNE", "BEQ", "BCC", "BCS", "BPL", "BMI", "BVC", "BVS"];
 
-  init(tokens, visitedFiles = nil) {
+  init(tokens, visitedFiles = nil, logger = nil) {
     this.tokens = tokens;
+    this.logger = logger;
     this.current = 0;
     this.visitedFiles = visitedFiles ?? [];
   }
@@ -60,6 +61,7 @@ class AssemblyParser {
         lineTokens[0].type == TokenType.STAR and
         lineTokens[1].type == TokenType.EQUAL) {
       var target = lineTokens[2].literal ?? lineTokens[2].lexeme;
+      this.logger?.debug("Parsed ORIGIN");
       return Statement("ORIGIN", nil, "*=", AddressingMode.IMMEDIATE, target, lineNum);
     }
 
@@ -75,24 +77,10 @@ class AssemblyParser {
         }
 
         var valExpr = this.tokensToString(lineTokens, 2, lineTokens.length());
+        this.logger?.debug("Parsed CONSTANT: " + valExpr);
         return Statement("CONSTANT", symName, opLexeme, nil, valExpr, lineNum);
       }
     }
-
-    /*
-        var valToken = lineTokens[2];
-        var val = valToken.literal ?? valToken.lexeme;
-
-        if (!isnumber(val) and typeof(val) == "String") {
-          if (val[0] == '$') {
-            val = Math.from_hex("0x" + val.slice(1));
-          }
-        }
-
-        return Statement("CONSTANT", symName, opLexeme, nil, val, lineNum);
-      }
-    }
-    */
 
     // 3. check for label prefix (identifier followed by colon)
     if (lineTokens.length() >= 2 and
@@ -104,10 +92,12 @@ class AssemblyParser {
 
     // if line only contains a label
     if (idx >= lineTokens.length()) {
+      this.logger?.debug("Parsed LABEL: " + label);
       return Statement("LABEL_ONLY", label, "", nil, nil, lineNum);
     }
 
     if (lineTokens[idx].type == TokenType.DIRECTIVE) {
+      //this.logger?.debug("Parsed DIRECTIVE: " + label);
       return this.parseDirective(lineTokens, idx, label, lineNum);
     }
 
@@ -140,11 +130,6 @@ class AssemblyParser {
     if (lineTokens[idx].type == TokenType.HASH) {
       var expr = this.tokensToString(lineTokens, idx + 1, lineTokens.length());
       return Statement(stmtType, label, name, AddressingMode.IMMEDIATE, expr, lineNum);
-      /*
-      var valToken = lineTokens[idx + 1];
-      var val = valToken.literal ?? valToken.lexeme;
-      return Statement(stmtType, label, name, AddressingMode.IMMEDIATE, val, lineNum);
-      */
     }
 
     // indirectmodes: starts with '('
@@ -159,13 +144,6 @@ class AssemblyParser {
         var expr = this.tokensToString(lineTokens, idx + 1, lastIdx - 2);
         return Statement(stmtType, label, name, AddressingMode.IND_X, expr, lineNum);
       }
-
-      /*
-      if (rem >= 5 and lineTokens[idx + 2].type == TokenType.COMMA and
-          (lineTokens[idx + 3].lexeme == "X" or lineTokens[idx + 3].lexeme == "x")) {
-        return Statement(stmtType, label, name, ADdressingMode.IND_X, innerVal, lineNum);
-      }
-      */
 
       // check for indirect indexed ($02),y -> ends with rparent, comma, y
       if (rem >= 5 and lineTokens[idx + 2].type  == TokenType.RPAREN and
@@ -202,22 +180,6 @@ class AssemblyParser {
     var mode = (this.isBranch(name)) ? AddressingMode.RELATIVE : AddressingMode.ABSOLUTE;
 
     return Statement(stmtType, label, name, mode, targetExpr, lineNum);
-    /*
-    if (rem >= 3 and lineTokens[idx + 1].type == TokenType.COMMA) {
-      var reg = lineTokens[idx + 2].lexeme;
-      if (reg == "X" or reg == "x") {
-        return Statement(stmtType, label, name, AddressingMode.ABSOLUTE_X, target, lineNum);
-      } else if (reg == "Y" or reg == "y") {
-        return Statement(stmtType, label, name, AddressingMode.ABSOLUTE_Y, target, lineNum);
-      }
-    }
-
-    // check for relative branch instructions before defaulting to absolute
-    var mode = (this.isBranch(name)) ? AddressingMode.RELATIVE : AddressingMode.ABSOLUTE;
-
-    // default to absolute (pass 1/2 will downgrade to ZERO_PAGE if target <= 255)
-    return Statement(stmtType, label, name, mode, target, lineNum);
-    */
   }
 
   tokensToString(tokens, start, end) {
@@ -246,6 +208,7 @@ class AssemblyParser {
     if (dirName == ".BASIC") {
       // 12 byte SYS 2061 ($080d) BASIC header
       var basicBytes = [0x0b, 0x08, 0x0a, 0x00, 0x9e, 0x20, 0x32, 0x30, 0x36, 0x32, 0x00, 0x00, 0x00];
+      this.logger?.debug("Parsed Directive: .basic");
       return Statement("DIRECTIVE", label, dirName, nil, basicBytes, lineNum);
     }
     
@@ -258,6 +221,7 @@ class AssemblyParser {
         }
         idx += 1;
       }
+      this.logger?.debug("Parsed Directive: .byte");
       return Statement("DIRECTIVE", label, dirName, nil, byteValues, lineNum);
     }
 
@@ -270,6 +234,7 @@ class AssemblyParser {
         }
         idx += 1;
       }
+      this.logger?.debug("Parsed Directive: .word");
       return Statement("DIRECTIVE", label, dirName, nil, wordValues, lineNum);
     }
 
@@ -288,6 +253,7 @@ class AssemblyParser {
       if (path[0] == '"') {
         path = path.slice(1, -1);
       }
+      this.logger?.debug("Parsed Directive: .include " + path);
       return this.processInclude(path, lineNum);
     }
 
@@ -414,17 +380,3 @@ class AssemblyParser {
   }
 }
 
-/*
-// Source: * = $0801
-if (this.match("STAR") and this.match("EQUAL")) {
-  var targetAddress = this.parseExpression();
-  return Statement("ORIGIN", nil, "*=", AddressingMode.IMMEDIATE, targetAddress);
-}
-
-// Source: main: LDA #$00
-if (this.check("IDENTIFIER") and this.peekNext().type == "COLON") {
-  var labelName = this.advance().lexeme;
-  this.advance(); // consume ':'
-  // continue parsing the rest of the line as an instruction/directive attached to 'labelName'
-}
-*/

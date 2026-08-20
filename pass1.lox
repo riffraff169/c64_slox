@@ -90,38 +90,6 @@ class Pass1 {
       }
     }
 
-    /*
-      if (stmt.type == "CONSTANT") {
-        this.symbolTable[stmt.label] = stmt.operand;
-        stmt.pc = this.currentPC;
-        stmt.size = 0;
-      } else if (stmt.type == "ORIGIN") {
-        this.currentPC = stmt.operand;
-        stmt.pc = this.currentPC;
-        stmt.size = 0;
-      } else if (stmt.type == "INSTRUCTION") {
-        var size = this.calculateInstructionSize(stmt);
-        stmt.size = size;
-        this.currentPC += size;
-      } else if (stmt.type == "DIRECTIVE") {
-        var dirName = stmt.name.to_upper();
-
-        if (dirName == ".BASIC") {
-          this.currentPC = 2049;
-          stmt.pc = this.currentPC;
-          stmt.size = 13;
-          this.currentPC += 13;
-        } else {
-          var size = this.calculateDirectiveSize(stmt);
-          stmt.size = size;
-          this.currentPC += size;
-        }
-      } else if (stmt.type == "LABEL_ONLY") {
-        stmt.size = 0;
-      }
-    }
-    */
-
     var startPC = 0x0801;
     if (this.statements.length() > 0) {
       startPC = this.statements[0].pc;
@@ -138,16 +106,24 @@ class Pass1 {
   calculateInstructionSize(stmt) {
     // zero-page early optimization
     // if the operand is a literal number <= 255, downgrade ABSOLUTE -> ZERO_PAGE early
-    if (stmt.mode == AddressingMode.ABSOLUTE and isnumber(stmt.operand)) {
-      if (stmt.operand <= 255 and this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE)) {
+    var val = this.parseOperandValue(stmt.operand);
+    /*
+    print typeof(stmt.operand);
+    print stmt.operand;
+    print val;
+    */
+    if (val and val >= 0 and val <= 255) {
+      if (stmt.mode == AddressingMode.ABSOLUTE and this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE)) {
         stmt.mode = AddressingMode.ZERO_PAGE;
         return 2;
       }
-    }
 
-    if (stmt.mode == AddressingMode.ABSOLUTE_X and isnumber(stmt.operand)) {
-      if (stmt.operand <= 255 and this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE_X)) {
+      if (stmt.mode == AddressingMode.ABSOLUTE_X and this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE_X)) {
         stmt.mode = AddressingMode.ZERO_PAGE_X;
+        return 2;
+      }
+      if (stmt.mode == AddressingMode.ABSOLUTE_Y and this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE_Y)) {
+        stmt.mode = AddressingMode.ZERO_PAGE_Y;
         return 2;
       }
     }
@@ -178,6 +154,52 @@ class Pass1 {
   supportsMode(mnemonic, mode) {
     if (!this.opcodes.has(mnemonic)) return false;
     return this.opcodes[mnemonic].has(mode);
+  }
+
+  parseOperandValue(operand) {
+    if (operand == nil) return nil;
+    if (isnumber(operand)) return operand;
+    if (!isstring(operand)) return nil;
+
+    var str = operand;
+    if (this.symbolTable.has(str)) {
+      var symVal = this.symbolTable[str];
+      if (isnumber(symVal)) return symVal;
+    }
+
+    if (str.length() == 0) return nil;
+
+    // hex
+    if (str[0] == '$') {
+      return Math.from_hex(str.slice(1));
+    }
+
+    // 3 binary
+    if (str[0] == '%') {
+      return Math.from_bin(str.slice(1));
+    }
+
+    // 4 low/high byte extractors < >
+    if (str[0] == '<' or str[0] == '>') {
+      var innerVal = this.parseOperandValue(str.slice(1));
+      if (innerVal != nil) {
+        return (str[0] == '<') ? (innerVal % 256) : (innterVal / 256).floor();
+      }
+    }
+
+    // 5 plain decimal string
+    var isDec = true;
+    for (var i = 0; i < str.length(); i += 1) {
+      if (str[i] < '0' or str[i] > '9') {
+        isDec = false;
+        break;
+      }
+    }
+    if (isDec) {
+      return Number(str);
+    }
+
+    return nil;
   }
 
   calculateDirectiveSize(stmt) {
