@@ -1,0 +1,387 @@
+import "ffi";
+require("notcurses.lox");
+
+class SpriteEditor {
+  init(nc, spriteWidth, spriteHeight) {
+    this.nc = nc;
+    this.std = nc.get_stdplane();
+
+    this.gridWidth = spriteWidth;
+    this.gridHeight = spriteHeight;
+
+    var canvasCols = (this.gridWidth * 2) + 2;
+    var previewCols = (this.gridWidth * 2) + 2;
+    var rightSideCols = (previewCols > 22) ? previewCols : 22;
+
+    this.minRows = 15 + (this.gridHeight + 2) + 2;
+    this.minCols = 4 + canvasCols + 3 + rightSideCols + 2;
+
+    if (!this.check_terminal_size()) {
+      this.valid = false;
+      return;
+    }
+    this.valid = true;
+
+    this.isMulticolor = false;
+
+    this.palette = [
+      [0, 0, 0],        // 0: black
+      [255, 255, 255],  // 1: white
+      [220, 50, 50],    // 2: red
+      [50, 200, 50],    // 3: green
+      [50, 100, 240],   // 4: blue
+      [240, 220, 50],   // 5: yellow
+      [220, 130, 40],   // 6: orange
+      [160, 60, 200]    // 7: purple
+    ];
+    this.activeColorIdx = 1;
+
+    this.pixels = [];
+    for (var y = 0; y < this.gridHeight; y += 1) {
+      this.pixels.push([0; this.gridWidth]);
+    }
+
+    this.setup_planes();
+    this.render_all();
+  }
+
+  check_terminal_size() {
+    var dim = this.std.get_dim();
+    var rows = dim[0];
+    var cols = dim[1];
+    //var rows, cols = dim;
+
+    if (rows < this.minRows or cols < this.minCols) {
+      this.nc.stop();
+      print "Error: Terminal size too small for Sprite Editor.";
+      print "Required dimensions: " + this.minCols + "x" + this.minRows;
+      print "Current terminal size: " + cols + "x" + rows;
+      return false;
+    }
+    return true;
+  }
+
+  setup_planes() {
+    this.std.set_bg(20, 20, 25);
+    this.std.set_fg(200, 200, 200);
+    this.std.erase();
+    this.std.box();
+    this.std.put_str_aligned(1, "center", "--- Slox Sprite Editor ---");
+    this.std.put_str(2, 2, "Click Palette to pick color | Click Canvas to paint | Press 'q' to exit");
+
+    var canvasRows = this.gridHeight + 2;
+    var canvasCols = (this.gridWidth * 2) + 2;
+    this.canvasPlane = this.std.create_child(4, 4, canvasRows, canvasCols);
+
+    var paletteX = 4 + canvasCols + 3;
+    this.palettePlane = this.std.create_child(4, paletteX, 10, 22);
+
+    this.previewPlane = this.std.create_child(15, paletteX, this.gridHeight + 2, (this.gridWidth * 2) + 2);
+  }
+
+  update_status_line(msg) {
+    this.std.set_bg(20, 20, 25);
+    this.std.set_fg(200, 200, 200);
+    this.std.put_str(2, 2, msg + " " * 32);
+  }
+
+  draw_canvas() {
+    this.canvasPlane.set_bg(30, 30, 35);
+    this.canvasPlane.erase();
+    this.canvasPlane.box();
+
+    for (var py = 0; py < this.gridHeight; py += 1) {
+      for (var px = 0; px < this.gridWidth; px += 1) {
+        var colorIdx = this.pixels[py][px];
+        var rgb = this.palette[colorIdx];
+
+        this.canvasPlane.set_bg(rgb[0], rgb[1], rgb[2]);
+        this.canvasPlane.put_str(py + 1, (px * 2) + 1, "  ");
+      }
+    }
+  }
+
+  draw_palette()  {
+    this.palettePlane.set_bg(30, 30, 35);
+    this.palettePlane.set_fg(220, 220, 220);
+    this.palettePlane.erase();
+    this.palettePlane.box();
+    this.palettePlane.put_str(0, 2, "[ Palette ]");
+
+    for (var i = 0; i < this.palette.length(); i += 1) {
+      var rgb = this.palette[i];
+      var py = (i / 2).floor() + 2;
+      var px = (i % 2 == 0) ? 2 : 11;
+
+      this.palettePlane.set_bg(rgb[0], rgb[1], rgb[2]);
+      this.palettePlane.put_str(py, px, "    ");
+
+      if (i == this.activeColorIdx) {
+        this.palettePlane.set_bg(30, 30, 35);
+        this.palettePlane.set_fg(255, 255, 255);
+        this.palettePlane.put_str(py, px - 1, ">");
+        this.palettePlane.put_str(py, px + 4, "<");
+      }
+    }
+  }
+
+  draw_preview() {
+    this.previewPlane.set_bg(15, 15, 20);
+    this.previewPlane.erase();
+    this.previewPlane.box();
+    this.previewPlane.put_str(0, 2, "[ Preview ]");
+
+    for (var py = 0; py < this.gridHeight; py += 1) {
+      for (var px = 0; px < this.gridWidth; px += 1) {
+        var rgb = this.palette[this.pixels[py][px]];
+        this.previewPlane.set_bg(rgb[0], rgb[1], rgb[2]);
+        this.previewPlane.put_str(py + 1, (px * 2) + 1, "  ");
+      }
+    }
+  }
+
+  render_all() {
+    this.draw_canvas();
+    this.draw_palette();
+    this.draw_preview();
+    this.nc.render();
+  }
+
+  handle_click(screenY, screenX)  {
+    if (this.palettePlane.contains_point(screenY, screenX)) {
+      var local = this.palettePlane.to_local(screenY, screenX);
+      var ly = local[0] - 2;
+      var lx = local[1];
+
+      if (ly >= 0 and ly < 4) {
+        var col = (lx >= 11) ? 1 : 0;
+        var idx = (ly * 2) + col;
+        if (idx < this.palette.length()) {
+          this.activeColorIdx = idx;
+          this.draw_palette();
+          this.nc.render();
+        }
+      }
+      return;
+    }
+
+    if (this.canvasPlane.contains_point(screenY, screenX)) {
+      var local = this.canvasPlane.to_local(screenY, screenX);
+      var gy = local[0] - 1;
+      var gx = (local[1] - 1) / 2;
+
+      if (gy >= 0 and gy < this.gridHeight and gx >= 0 and gx < this.gridWidth) {
+        this.pixels[gy][gx] = this.activeColorIdx;
+        this.draw_canvas();
+        this.draw_preview();
+        this.nc.render();
+      }
+    }
+  }
+
+  prompt_save() {
+    var dim = this.std.get_dim();
+    var rows = dim[0];
+    var cols = dim[1];
+
+    var pRows = 7;
+    var pCols = 44;
+    var py = ((rows - pRows) / 2).floor();
+    var px = ((cols - pCols) / 2).floor();
+
+    var popup = this.std.create_child(py, px, pRows, pCols);
+    popup.set_bg(25, 25, 35);
+    popup.set_fg(220, 220, 220);
+    popup.erase();
+    popup.box();
+
+    var fillLine = " " * (pCols - 2);
+    for (var r = 1; r < pRows - 1; r += 1) {
+      popup.put_str(r, 1, fillLine);
+    }
+
+    popup.put_str(1, 2, "=== Save Sprite ===");
+    popup.put_str(3, 2, "Filename:");
+    popup.put_str(5, 2, "[Enter] Save  |  [Esc] Cancel");
+
+    var filename = "";
+    var result = nil;
+
+    while (true) {
+      // pad input to exactly 28 chars
+      var fieldText = filename;
+      if (fieldText.length() < 28) {
+        fieldText = fieldText + " " * (28 - fieldText.length());
+      }
+      
+      popup.set_bg(15, 15, 20);
+      popup.set_fg(255, 255, 255);
+      popup.put_str(3, 12, fieldText);
+      this.nc.render();
+
+      var ev = this.nc.get_event();
+      if (ev == nil or ev["type"] == "release") continue;
+
+      var key = ev["key"];
+
+      if (key == "Enter") {
+        if (filename.length() > 0) {
+          result = filename;
+        }
+        break;
+      }
+
+      if (key == "Esc") {
+        result = nil;
+        break;
+      }
+
+      if (key == "Backspace") {
+        if (filename.length() > 0) {
+          filename = filename.slice(0, filename.length() - 1);
+        }
+        continue;
+      }
+
+      if (!ev["is_mouse"] and key != nil and key.length() == 1) {
+        if (filename.length() < 30) {
+          filename = filename + key;
+        }
+      }
+    }
+
+    popup.destroy();
+    this.render_all();
+    return result;
+  }
+
+  save_sprite(filepath) {
+    var charArray = [];
+    
+    if (!this.isMulticolor) {
+      // single color mode (1 bit/pxel, 24 pixels = 3 bytes/row)
+      for (var y = 0; y < 21; y += 1) {
+        for (var byteCol = 0; byteCol < 3; byteCol += 1) {
+          var b = 0;
+          for (var bit = 0; bit < 8; bit += 1) {
+            var x = (byteCol * 8) + bit;
+            if (this.pixels[y][x] != 0) {
+              b = b | (1 << (7 - bit));
+            }
+          }
+          charArray.push(chr(b));
+        }
+      }
+    } else {
+      // multicolor mode (2 bits/pixel, 12 wide pixels = 3 bytes/row)
+      for (var y = 0; y < 21; y += 1) {
+        for (var byteCol = 0; byteCol < 3; byteCol += 1) {
+          var b = 0;
+          for (var p = 0; p < 4; p += 1) {
+            var x = (byteCol * 8) + (p * 2);
+            var colorBits = this.pixels[y][x] & 3;
+            var shift = 6 - (p * 2);
+            b = b | (colorBits << shift);
+          }
+          charArray.push(chr(b));
+        }
+      }
+    }
+
+    // offset 63: trailing 64th padding byte
+    charArray.push(chr(0));
+
+    var binaryData = charArray.join("");
+    var res = File.save(filepath, binaryData);
+
+    if (res != nil) {
+      this.update_status_line("Saved 64-byte sprite binary to " + filepath);
+    } else {
+      this.update_status_line("Error: Could not open file for writing: " + filepath);
+    }
+  }
+
+  load_sprite(filepath) {
+    var data = File.load(filepath);
+
+    if (data == nil or data.length() < 63) {
+      this.update_status_line("Error: Invalid or unreadable sprite file: " + filepath);
+      return false;
+    }
+
+    var byteIdx = 0;
+
+    if (!this.isMulticolor) {
+      // unpack single color mode
+      for (var y = 0; y < 21; y += 1) {
+        for (var byteCol = 0; byteCol < 3; byteCol += 1) {
+          var b = data[byteIdx];
+          byteIdx += 1;
+
+          for (var bit = 0; bit < 8; bit += 1) {
+            var x = (byteCol * 8) + bit;
+            var isSet = (b & (1 << (7 - bit))) != 0;
+            this.pixels[y][x] = isSet ? 1 : 0;
+          }
+        }
+      }
+    } else {
+      // unpack multicolor mode
+      for (var y = 0; y < 21; y += 1) {
+        for (var byteCol = 0; byteCol < 3; byteCol += 1) {
+          var b = data[byteIdx];
+          byteIdx += 1;
+
+          for (var p = 0; p < 4; p += 1) {
+            var x = (byteCol * 8) + (p * 2);
+            var colorVal = (b >> (6 - (p * 2))) & 3;
+            this.pixels[y][x] = colorVal;
+            this.pixels[y][x + 1] = colorVal;
+          }
+        }
+      }
+    }
+
+    this.update_status_line("Loaded sprite from " + filepath);
+    this.render_all();
+    return true;
+  }
+
+  loop() {
+    while (true) {
+      var input = this.nc.get_event();
+      if (input == nil) continue;
+
+      if (input["type"] == "release") continue;
+
+      var key = input["key"];
+
+      if (key == "q" or key == "Q")
+        break;
+
+      if (key == "s" or key == "S") {
+        var filepath = this.prompt_save();
+        if (filepath != nil) {
+          this.save_sprite(filepath);
+        }
+        continue;
+      }
+
+      if (input["is_mouse"]) {
+        var button = input["key"];
+        var screenY = input["y"];
+        var screenX = input["x"];
+
+        if (button == "Button1") {
+          this.handle_click(screenY, screenX);
+        }
+      }
+    }
+  }
+
+  stop() {
+    if (this.canvasPlane != nil) this.canvasPlane.destroy();
+    if (this.palettePlane != nil) this.palettePlane.destroy();
+    if (this.previewPlane != nil) this.previewPlane.destroy();
+  }
+}

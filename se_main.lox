@@ -1,0 +1,42 @@
+import "ffi";
+require("notcurses.lox");
+require("sprite_editor.lox");
+
+var nc = Notcurses();
+at_exit(fun() { nc.stop(); });
+
+nc.enable_mouse();
+
+var editor = SpriteEditor(nc, 16, 16);
+
+if (editor.valid) {
+  editor.loop();
+  editor.stop();
+  print "Sprite editor closed.";
+}
+
+/*
+if (editor.valid) {
+  while (true) {
+    var input = nc.get_event();
+    var key = input["key"];
+
+    if (key == "q" or key == "Q") {
+      break;
+    }
+
+    if (input["is_mouse"]) {
+      var button = input["key"];
+      var screenY = input["y"];
+      var screenX = input["x"];
+
+      if (button == "Button1") {
+        editor.handle_click(screenY, screenX);
+      }
+    }
+  }
+
+  nc.stop();
+  print "Sprite editor closed.";
+}
+*/
