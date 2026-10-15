@@ -1,3 +1,4 @@
+#!/usr/bin/env slox
 import "ffi";
 require("notcurses.lox");
 require("logger.lox");

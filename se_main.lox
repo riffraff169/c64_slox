@@ -7,7 +7,7 @@ at_exit(fun() { nc.stop(); });
 
 nc.enable_mouse();
 
-var editor = SpriteEditor(nc, 16, 16);
+var editor = SpriteEditor(nc, 24, 21);
 
 if (editor.valid) {
   editor.loop();
