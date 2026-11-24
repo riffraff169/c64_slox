@@ -1,0 +1,932 @@
+require("canvas.lox");
+
+// X11 + Cairo sprite editor. Kept alongside the notcurses editor so both
+// front-ends share the same 24x21 sprite data semantics.
+//
+// Mono mode stores one bit per cell. Multicolor mode stores a 2-bit pattern in
+// each horizontal pair of cells, matching the C64 sprite memory layout.
+class CairoSpriteEditor {
+  init(canvas, options = nil) {
+    this.canvas = canvas;
+    this.grid_width = 24;
+    this.grid_height = 21;
+
+    this.mono_palette = [
+      [25, 25, 35],
+      [255, 255, 255]
+    ];
+    this.c64_palette = [
+      [0, 0, 0],       // 0: black
+      [255, 255, 255], // 1: white
+      [136, 0, 0],     // 2: red
+      [170, 255, 238], // 3: cyan
+      [204, 68, 204],  // 4: purple
+      [0, 204, 85],    // 5: green
+      [0, 0, 170],     // 6: blue
+      [238, 238, 119], // 7: yellow
+      [221, 136, 85],  // 8: orange
+      [102, 68, 0],    // 9: brown
+      [255, 119, 119], // 10: light red
+      [51, 51, 51],    // 11: dark grey
+      [119, 119, 119], // 12: grey
+      [170, 255, 102], // 13: light green
+      [0, 136, 255],   // 14: light blue
+      [187, 187, 187]  // 15: light grey
+    ];
+    this.c64_color_names = [
+      "black", "white", "red", "cyan", "purple", "green", "blue", "yellow",
+      "orange", "brown", "light red", "dark grey", "grey", "light green",
+      "light blue", "light grey"
+    ];
+    this.mc_color_indices = [0, 1, 5, 14];
+    this.mc_palette = [
+      [25, 25, 35],
+      this.c64_palette[this.mc_color_indices[1]],
+      this.c64_palette[this.mc_color_indices[2]],
+      this.c64_palette[this.mc_color_indices[3]]
+    ];
+    this.mono_labels = ["0: Off / Transparent", "1: On / White"];
+    this.mc_labels = ["00: Transparent", "01: Shared 1", "10: Primary", "11: Shared 2"];
+
+    this.is_multicolor = false;
+    this.active_pattern = 0;
+    this.status = "Ready";
+
+    this.pixels = [];
+    for (var y = 0; y < this.grid_height; y += 1) {
+      this.pixels.push([0; this.grid_width]);
+    }
+
+    this.color_dialog_pattern = nil;
+    this.color_dialog_selection = 1;
+    this.last_pattern_click = nil;
+    this.dialog_mode = nil;
+    this.dialog_text = "";
+    this.dialog_text_draws = 0;
+    this.pressed_button = nil;
+    this.needs_paint = true;
+    this.incremental_cell_repaints = 0;
+    this.expose_region_repaints = 0;
+    this.color_dialog_repaints = 0;
+    this.color_dialog_close_repaints = 0;
+    this.status_line_repaints = 0;
+
+    this.compute_layout();
+    this.build_buttons();
+  }
+
+  compute_layout() {
+    var available_width = this.canvas.width - 360;
+    var available_height = this.canvas.height - 190;
+    var cell_width = available_width / this.grid_width;
+    var cell_height = available_height / this.grid_height;
+
+    this.cell_size = cell_width < cell_height ? cell_width : cell_height;
+    if (this.cell_size < 8) this.cell_size = 8;
+
+    this.canvas_x = 24;
+    this.canvas_y = 130;
+    this.panel_x = this.canvas_x + (this.grid_width * this.cell_size) + 28;
+    this.panel_width = this.canvas.width - this.panel_x - 24;
+    if (this.panel_width < 180) this.panel_width = 180;
+
+    this.palette_y = this.canvas_y;
+    this.preview_y = this.palette_y + 230;
+    var preview_width = (this.panel_width - 32) / this.grid_width;
+    this.preview_cell = preview_width < 12 ? preview_width : 12;
+  }
+
+  build_buttons() {
+    this.buttons = [
+      {"label": "Mode (M)", "x": 24, "y": 72, "width": 130, "height": 38},
+      {"label": "Save (S)", "x": 164, "y": 72, "width": 120, "height": 38},
+      {"label": "Load (L)", "x": 294, "y": 72, "width": 120, "height": 38},
+      {"label": "Clear (C)", "x": 424, "y": 72, "width": 120, "height": 38},
+      {"label": "Colors (P)", "x": 554, "y": 72, "width": 130, "height": 38},
+      {"label": "Quit (Q)", "x": 694, "y": 72, "width": 120, "height": 38}
+    ];
+  }
+
+  needs_repaint() {
+    return this.needs_paint;
+  }
+
+  request_repaint() {
+    this.needs_paint = true;
+  }
+
+  mark_clean() {
+    this.needs_paint = false;
+  }
+
+  repaint_cells(y, xs) {
+    if (this.needs_paint) {
+      this.render();
+      return;
+    }
+
+    for (var i = 0; i < xs.length(); i += 1) {
+      this.draw_canvas_cell(this.canvas, xs[i], y);
+      this.draw_preview_cell(this.canvas, xs[i], y);
+    }
+    this.canvas.present();
+    this.incremental_cell_repaints = this.incremental_cell_repaints + 1;
+  }
+
+  repaint_region(x, y, width, height) {
+    if (this.needs_paint or width == nil or height == nil or
+        width <= 0 or height <= 0) {
+      this.render();
+      return;
+    }
+
+    this.canvas.save();
+    this.canvas.clipRect(x, y, width, height);
+    this.draw(this.canvas);
+    this.canvas.restore();
+    this.canvas.present();
+    this.expose_region_repaints = this.expose_region_repaints + 1;
+    this.mark_clean();
+  }
+
+  repaint_pattern(pattern) {
+    if (this.needs_paint or !this.is_multicolor) {
+      this.request_repaint();
+      return;
+    }
+
+    for (var y = 0; y < this.grid_height; y += 1) {
+      for (var x = 0; x < this.grid_width; x += 1) {
+        if ((this.pixels[y][x] & 3) == pattern) {
+          this.draw_canvas_cell(this.canvas, x, y);
+          this.draw_preview_cell(this.canvas, x, y);
+        }
+      }
+    }
+    this.canvas.present();
+    this.incremental_cell_repaints = this.incremental_cell_repaints + 1;
+  }
+
+  status_line_rect() {
+    return {
+      "x": 20,
+      "y": this.canvas.height - 40,
+      "width": this.canvas.width - 40,
+      "height": 40
+    };
+  }
+
+  repaint_status_line() {
+    if (this.needs_paint) {
+      this.render();
+      return;
+    }
+    var rect = this.status_line_rect();
+    this.canvas.save();
+    this.canvas.clipRect(rect["x"], rect["y"], rect["width"], rect["height"]);
+    this.draw(this.canvas);
+    this.canvas.restore();
+    this.canvas.present();
+    this.status_line_repaints = this.status_line_repaints + 1;
+    this.mark_clean();
+  }
+
+  repaint_color_dialog() {
+    if (this.color_dialog_pattern == nil) return;
+    if (this.needs_paint) {
+      this.render();
+      return;
+    }
+    var geometry = this.color_dialog_geometry();
+    this.canvas.save();
+    this.canvas.clipRect(geometry["x"], geometry["y"],
+        geometry["width"], geometry["height"]);
+    this.draw(this.canvas);
+    this.canvas.restore();
+    this.canvas.present();
+    this.color_dialog_repaints = this.color_dialog_repaints + 1;
+    this.mark_clean();
+  }
+
+  set_status(message) {
+    this.status = message;
+    this.request_repaint();
+  }
+
+  current_palette() {
+    return this.is_multicolor ? this.mc_palette : this.mono_palette;
+  }
+
+  current_labels() {
+    return this.is_multicolor ? this.mc_labels : this.mono_labels;
+  }
+
+  apply_color(pattern, color_index) {
+    if (pattern < 1 or pattern > 3) return false;
+    if (color_index < 0 or color_index >= this.c64_palette.length()) return false;
+
+    this.mc_color_indices[pattern] = color_index;
+    this.mc_palette[pattern] = this.c64_palette[color_index];
+    this.repaint_pattern(pattern);
+    return true;
+  }
+
+  pattern_count() {
+    return this.is_multicolor ? 4 : 2;
+  }
+
+  select_pattern(index) {
+    if (index < 0 or index >= this.pattern_count()) return false;
+    this.active_pattern = index;
+    this.set_status("Selected pattern " + this.current_labels()[index]);
+    return true;
+  }
+
+  convert_pixels_for_mode(multicolor) {
+    if (multicolor == this.is_multicolor) return;
+
+    for (var y = 0; y < this.grid_height; y += 1) {
+      for (var pair = 0; pair < this.grid_width / 2; pair += 1) {
+        var x = pair * 2;
+        if (multicolor) {
+          var left = this.pixels[y][x] != 0 ? 1 : 0;
+          var right = this.pixels[y][x + 1] != 0 ? 1 : 0;
+          var pattern = (left << 1) | right;
+          this.pixels[y][x] = pattern;
+          this.pixels[y][x + 1] = pattern;
+        } else {
+          var value = this.pixels[y][x] & 3;
+          this.pixels[y][x] = (value & 2) != 0 ? 1 : 0;
+          this.pixels[y][x + 1] = (value & 1) != 0 ? 1 : 0;
+        }
+      }
+    }
+    this.request_repaint();
+  }
+
+  toggle_mode() {
+    var multicolor = !this.is_multicolor;
+    this.convert_pixels_for_mode(multicolor);
+    this.is_multicolor = multicolor;
+    this.last_pattern_click = nil;
+    if (!this.is_multicolor and this.active_pattern > 1) {
+      this.active_pattern = 1;
+    }
+    var name = this.is_multicolor ? "multicolor" : "single-color";
+    this.set_status("Switched to " + name + " mode");
+  }
+
+  clear_pixels() {
+    for (var y = 0; y < this.grid_height; y += 1) {
+      for (var x = 0; x < this.grid_width; x += 1) {
+        this.pixels[y][x] = 0;
+      }
+    }
+    this.set_status("Cleared sprite");
+  }
+
+  set_pixel(x, y) {
+    if (x < 0 or x >= this.grid_width or y < 0 or y >= this.grid_height) return false;
+
+    var xs = [];
+    if (!this.is_multicolor) {
+      var value = this.active_pattern != 0 ? 1 : 0;
+      if (this.pixels[y][x] == value) return false;
+      this.pixels[y][x] = value;
+      xs.push(x);
+    } else {
+      var pair_x = x - (x % 2);
+      var pattern = this.active_pattern & 3;
+      if (this.pixels[y][pair_x] == pattern and
+          this.pixels[y][pair_x + 1] == pattern) return false;
+      this.pixels[y][pair_x] = pattern;
+      this.pixels[y][pair_x + 1] = pattern;
+      xs.push(pair_x);
+      xs.push(pair_x + 1);
+    }
+    this.repaint_cells(y, xs);
+    return true;
+  }
+
+  get_pixel(x, y) {
+    if (x < 0 or x >= this.grid_width or y < 0 or y >= this.grid_height) return nil;
+    return this.pixels[y][x];
+  }
+
+  pack_sprite() {
+    var bytes = [];
+    for (var y = 0; y < this.grid_height; y += 1) {
+      for (var byte_col = 0; byte_col < 3; byte_col += 1) {
+        var value = 0;
+        if (!this.is_multicolor) {
+          for (var bit = 0; bit < 8; bit += 1) {
+            var x = (byte_col * 8) + bit;
+            if (this.pixels[y][x] != 0) value = value | (1 << (7 - bit));
+          }
+        } else {
+          for (var pair = 0; pair < 4; pair += 1) {
+            var x = (byte_col * 8) + (pair * 2);
+            var pattern = this.pixels[y][x] & 3;
+            value = value | (pattern << (6 - (pair * 2)));
+          }
+        }
+        bytes.push(chr(value));
+      }
+    }
+    bytes.push(chr(0));
+    return bytes.join("");
+  }
+
+  unpack_sprite(data) {
+    if (data == nil or data.length() < 63) return false;
+
+    var byte_index = 0;
+    for (var y = 0; y < this.grid_height; y += 1) {
+      for (var byte_col = 0; byte_col < 3; byte_col += 1) {
+        var value = data[byte_index];
+        byte_index = byte_index + 1;
+
+        if (!this.is_multicolor) {
+          for (var bit = 0; bit < 8; bit += 1) {
+            var x = (byte_col * 8) + bit;
+            this.pixels[y][x] = (value & (1 << (7 - bit))) != 0 ? 1 : 0;
+          }
+        } else {
+          for (var pair = 0; pair < 4; pair += 1) {
+            var x = (byte_col * 8) + (pair * 2);
+            var pattern = (value >> (6 - (pair * 2))) & 3;
+            this.pixels[y][x] = pattern;
+            this.pixels[y][x + 1] = pattern;
+          }
+        }
+      }
+    }
+    this.request_repaint();
+    return true;
+  }
+
+  save_sprite(filepath) {
+    if (filepath == nil or filepath == "") {
+      this.set_status("Save cancelled: empty filename");
+      return false;
+    }
+
+    var saved = File.save(filepath, this.pack_sprite()) != nil;
+    if (saved) this.set_status("Saved 64-byte sprite to " + filepath);
+    else this.set_status("Error: could not write " + filepath);
+    return saved;
+  }
+
+  load_sprite(filepath) {
+    if (filepath == nil or filepath == "") {
+      this.set_status("Load cancelled: empty filename");
+      return false;
+    }
+
+    var data = File.load(filepath);
+    if (!this.unpack_sprite(data)) {
+      this.set_status("Error: invalid or unreadable sprite file " + filepath);
+      return false;
+    }
+
+    this.set_status("Loaded sprite from " + filepath);
+    return true;
+  }
+
+  canvas_cell_at(px, py) {
+    if (px < this.canvas_x or py < this.canvas_y) return nil;
+    var gx = Integer((px - this.canvas_x) / this.cell_size);
+    var gy = Integer((py - this.canvas_y) / this.cell_size);
+    if (gx < 0 or gx >= this.grid_width or gy < 0 or gy >= this.grid_height) return nil;
+    return [gx, gy];
+  }
+
+  palette_index_at(px, py) {
+    var count = this.pattern_count();
+    var x0 = this.panel_x + 16;
+    var y0 = this.palette_y + 46;
+    if (px < x0 or py < y0) return nil;
+    var index = Integer((py - y0) / 40);
+    if (index < 0 or index >= count) return nil;
+    if (px > x0 + this.panel_width - 32) return nil;
+    return index;
+  }
+
+  pattern_click_key(kind, pattern) {
+    return kind + ":" + pattern;
+  }
+
+  button_at(px, py) {
+    for (var i = 0; i < this.buttons.length(); i += 1) {
+      var button = this.buttons[i];
+      if (px >= button["x"] and px <= button["x"] + button["width"] and
+          py >= button["y"] and py <= button["y"] + button["height"]) {
+        return button["label"];
+      }
+    }
+    return nil;
+  }
+
+  color_dialog_geometry() {
+    return {"x": 240, "y": 230, "width": 480, "height": 250};
+  }
+
+  color_dialog_clear_rect() {
+    var geometry = this.color_dialog_geometry();
+    return {
+      "x": geometry["x"] - 4,
+      "y": geometry["y"] - 4,
+      "width": geometry["width"] + 8,
+      "height": geometry["height"] + 8
+    };
+  }
+
+  color_swatch_rect(index) {
+    var geometry = this.color_dialog_geometry();
+    var column = index % 4;
+    var row = Integer(index / 4);
+    return {
+      "x": geometry["x"] + 20 + (column * 112),
+      "y": geometry["y"] + 66 + (row * 44),
+      "width": 100,
+      "height": 36
+    };
+  }
+
+  color_swatch_at(px, py) {
+    for (var i = 0; i < this.c64_palette.length(); i += 1) {
+      var rect = this.color_swatch_rect(i);
+      if (px >= rect["x"] and px <= rect["x"] + rect["width"] and
+          py >= rect["y"] and py <= rect["y"] + rect["height"]) {
+        return i;
+      }
+    }
+    return nil;
+  }
+
+  open_color_picker_for_active() {
+    if (!this.is_multicolor) {
+      this.set_status("Color choices only apply in multicolor mode");
+      return false;
+    }
+    if (this.active_pattern < 1) {
+      this.set_status("Select pattern 01, 10, or 11 before choosing a color");
+      return false;
+    }
+    return this.open_color_dialog(this.active_pattern);
+  }
+
+  open_color_dialog(pattern) {
+    if (!this.is_multicolor or pattern < 1 or pattern > 3) return false;
+    this.color_dialog_pattern = pattern;
+    this.color_dialog_selection = this.mc_color_indices[pattern];
+    this.last_pattern_click = nil;
+    this.set_status("Choose a C64 color for pattern " + this.mc_labels[pattern]);
+    return true;
+  }
+
+  cancel_color_dialog() {
+    if (this.color_dialog_pattern == nil) return false;
+    var clear = this.color_dialog_clear_rect();
+    this.color_dialog_pattern = nil;
+    this.last_pattern_click = nil;
+    this.status = "Color selection cancelled";
+    this.repaint_region(clear["x"], clear["y"],
+        clear["width"], clear["height"]);
+    this.color_dialog_close_repaints = this.color_dialog_close_repaints + 1;
+    this.repaint_status_line();
+    return true;
+  }
+
+  choose_color(index) {
+    var pattern = this.color_dialog_pattern;
+    if (pattern == nil or index < 0 or index >= this.c64_palette.length()) return false;
+
+    var clear = this.color_dialog_clear_rect();
+    this.color_dialog_pattern = nil;
+    this.last_pattern_click = nil;
+    this.apply_color(pattern, index);
+    this.status = "Set pattern " + this.mc_labels[pattern] + " to C64 color " + index;
+    this.repaint_region(clear["x"], clear["y"],
+        clear["width"], clear["height"]);
+    this.color_dialog_close_repaints = this.color_dialog_close_repaints + 1;
+    this.repaint_status_line();
+    return true;
+  }
+
+  handle_color_dialog_key(event) {
+    var keysym = event["keysym"];
+    if (keysym == X11.XK_Escape) {
+      this.cancel_color_dialog();
+      return;
+    }
+    if (keysym == X11.XK_Return or keysym == X11.XK_KP_Enter) {
+      this.choose_color(this.color_dialog_selection);
+      return;
+    }
+    if (keysym == X11.XK_Left or keysym == X11.XK_Up) {
+      this.color_dialog_selection =
+          (this.color_dialog_selection + this.c64_palette.length() - 1) %
+          this.c64_palette.length();
+      this.repaint_color_dialog();
+      return;
+    }
+    if (keysym == X11.XK_Right or keysym == X11.XK_Down) {
+      this.color_dialog_selection =
+          (this.color_dialog_selection + 1) % this.c64_palette.length();
+      this.repaint_color_dialog();
+    }
+  }
+
+  dialog_geometry() {
+    return {"x": 260, "y": 250, "width": 440, "height": 180};
+  }
+
+  dialog_text_rect() {
+    var geometry = this.dialog_geometry();
+    return {
+      "x": geometry["x"] + 20,
+      "y": geometry["y"] + 78,
+      "width": geometry["width"] - 40,
+      "height": 40
+    };
+  }
+
+  paint_dialog_text(canvas) {
+    var rect = this.dialog_text_rect();
+    canvas.fillRect(rect["x"], rect["y"], rect["width"], rect["height"],
+        [0.04, 0.05, 0.07]);
+    canvas.strokeRect(rect["x"], rect["y"], rect["width"], rect["height"],
+        [0.10, 0.78, 1.0], 2.0);
+    canvas.textTop(rect["x"] + 12, rect["y"] + 13, this.dialog_text,
+        [1.0, 1.0, 1.0], 14.0);
+  }
+
+  redraw_dialog_text() {
+    this.paint_dialog_text(this.canvas);
+    this.canvas.present();
+    this.dialog_text_draws = this.dialog_text_draws + 1;
+    this.mark_clean();
+  }
+
+  open_dialog(mode) {
+    this.dialog_mode = mode;
+    this.dialog_text = "";
+    this.last_pattern_click = nil;
+    var verb = mode == "save" ? "Save" : "Load";
+    this.set_status(verb + " sprite: type a filename, Enter to confirm, Esc to cancel");
+  }
+
+  close_dialog() {
+    this.dialog_mode = nil;
+    this.dialog_text = "";
+    this.request_repaint();
+  }
+
+  handle_dialog_key(event) {
+    var keysym = event["keysym"];
+    if (keysym == X11.XK_Return or keysym == X11.XK_KP_Enter) {
+      var filepath = this.dialog_text;
+      var mode = this.dialog_mode;
+      this.close_dialog();
+      if (mode == "save") this.save_sprite(filepath);
+      else this.load_sprite(filepath);
+      return;
+    }
+
+    if (keysym == X11.XK_Escape) {
+      this.close_dialog();
+      this.set_status("Cancelled");
+      return;
+    }
+
+    if (keysym == X11.XK_BackSpace) {
+      if (this.dialog_text.length() > 0) {
+        this.dialog_text = this.dialog_text.slice(0, this.dialog_text.length() - 1);
+        this.redraw_dialog_text();
+      }
+      return;
+    }
+
+    var text = event["text"];
+    if (text == nil or text.length() != 1) return;
+    this.dialog_text = this.dialog_text + text;
+    this.redraw_dialog_text();
+  }
+
+  activate_button(label) {
+    if (label == "Mode (M)") {
+      this.toggle_mode();
+    } else if (label == "Save (S)") {
+      this.open_dialog("save");
+    } else if (label == "Load (L)") {
+      this.open_dialog("load");
+    } else if (label == "Clear (C)") {
+      this.clear_pixels();
+    } else if (label == "Colors (P)") {
+      this.open_color_picker_for_active();
+    } else if (label == "Quit (Q)") {
+      this.canvas.running = false;
+    }
+  }
+
+  handle_key(event) {
+    var keysym = event["keysym"];
+    if (this.color_dialog_pattern != nil) {
+      this.handle_color_dialog_key(event);
+      return;
+    }
+    if (this.dialog_mode != nil) {
+      this.handle_dialog_key(event);
+      return;
+    }
+
+    this.request_repaint();
+    this.last_pattern_click = nil;
+    if (keysym == X11.XK_Escape) {
+      this.canvas.running = false;
+      return;
+    }
+
+    var key = event["text"];
+    if (key == nil or key.length() != 1) return;
+
+    if (key == "q" or key == "Q") {
+      this.canvas.running = false;
+    } else if (key == "m" or key == "M") {
+      this.toggle_mode();
+    } else if (key == "s" or key == "S") {
+      this.open_dialog("save");
+    } else if (key == "l" or key == "L") {
+      this.open_dialog("load");
+    } else if (key == "c" or key == "C") {
+      this.clear_pixels();
+    } else if (key == "p" or key == "P") {
+      this.open_color_picker_for_active();
+    } else if (key == "1") {
+      this.select_pattern(0);
+    } else if (key == "2") {
+      this.select_pattern(1);
+    } else if (key == "3") {
+      this.select_pattern(2);
+    } else if (key == "4") {
+      this.select_pattern(3);
+    }
+  }
+
+  handle_event(event) {
+    var type = event["type"];
+    if (type == X11.Expose) {
+      this.repaint_region(event["x"], event["y"], event["width"], event["height"]);
+      return;
+    }
+
+    if (type == X11.ConfigureNotify) {
+      this.compute_layout();
+      this.request_repaint();
+      return;
+    }
+
+    if (type == X11.KeyPress) {
+      this.handle_key(event);
+      return;
+    }
+
+    if (this.color_dialog_pattern != nil) {
+      if (type == X11.ButtonRelease and event["button"] == 1) {
+        var swatch = this.color_swatch_at(event["x"], event["y"]);
+        if (swatch != nil) this.choose_color(swatch);
+        else this.cancel_color_dialog();
+      }
+      return;
+    }
+
+    if (this.dialog_mode != nil) return;
+    if (event["button"] != 1) return;
+
+    var px = event["x"];
+    var py = event["y"];
+
+    if (type == X11.ButtonPress) {
+      this.pressed_button = this.button_at(px, py);
+      if (this.pressed_button != nil) this.request_repaint();
+      return;
+    }
+
+    if (type != X11.ButtonRelease) return;
+
+    var was_pressed = this.pressed_button;
+    this.pressed_button = nil;
+    var released = this.button_at(px, py);
+    if (released != nil and released == was_pressed) {
+      this.request_repaint();
+      this.activate_button(released);
+      return;
+    }
+    if (was_pressed != nil) this.request_repaint();
+
+    var palette_index = this.palette_index_at(px, py);
+    if (palette_index != nil) {
+      var palette_key = this.pattern_click_key("palette", palette_index);
+      if (this.is_multicolor and palette_index >= 1 and
+          this.last_pattern_click == palette_key) {
+        this.open_color_dialog(palette_index);
+        return;
+      }
+      this.select_pattern(palette_index);
+      this.last_pattern_click = this.is_multicolor ? palette_key : nil;
+      return;
+    }
+
+    var cell = this.canvas_cell_at(px, py);
+    if (cell != nil) {
+      this.set_pixel(cell[0], cell[1]);
+      this.last_pattern_click = nil;
+    }
+  }
+
+  draw(canvas) {
+    canvas.clear([0.055, 0.060, 0.085]);
+    canvas.textTop(24, 18, "Slox Sprite Editor (Cairo)", [0.92, 0.95, 1.0], 20.0);
+
+    var mode_name = this.is_multicolor ? "MULTICOLOR (24x21, 2-bit pairs)" :
+      "SINGLE-COLOR (24x21, 1-bit)";
+    canvas.textTop(24, 48, mode_name, [0.55, 0.65, 0.78], 12.0);
+
+    this.draw_buttons(canvas);
+    this.draw_canvas(canvas);
+    this.draw_palette(canvas);
+    this.draw_preview(canvas);
+
+    canvas.line(20, canvas.height - 40, canvas.width - 20, canvas.height - 40,
+        [0.20, 0.23, 0.31], 1.0);
+    canvas.textTop(24, canvas.height - 32, this.status, [0.72, 0.78, 0.88], 12.0);
+
+    if (this.color_dialog_pattern != nil) this.draw_color_dialog(canvas);
+    if (this.dialog_mode != nil) this.draw_dialog(canvas);
+  }
+
+  draw_button(canvas, button) {
+    var background = [0.13, 0.15, 0.21];
+    if (this.pressed_button == button["label"]) {
+      background = [0.08, 0.48, 0.66];
+    }
+
+    canvas.fillRect(button["x"], button["y"], button["width"], button["height"], background);
+    canvas.strokeRect(button["x"], button["y"], button["width"], button["height"],
+        [0.30, 0.34, 0.44], 1.0);
+    canvas.textMiddle(button["x"], button["y"], button["width"], button["height"],
+        button["label"], [0.92, 0.94, 0.98], 13.0);
+  }
+
+  draw_buttons(canvas) {
+    for (var i = 0; i < this.buttons.length(); i += 1) {
+      this.draw_button(canvas, this.buttons[i]);
+    }
+  }
+
+  cell_color(x, y) {
+    var value = this.pixels[y][x];
+    var palette = this.current_palette();
+    if (this.is_multicolor) return palette[value & 3];
+    return palette[value != 0 ? 1 : 0];
+  }
+
+  draw_canvas_cell(canvas, x, y) {
+    var size = this.cell_size;
+    var px = this.canvas_x + (x * size);
+    var py = this.canvas_y + (y * size);
+    canvas.fillRect(px, py, size, size, this.cell_color(x, y));
+    canvas.strokeRect(px, py, size, size, [0.18, 0.20, 0.27], 0.5);
+  }
+
+  draw_canvas(canvas) {
+    var size = this.cell_size;
+    canvas.fillRect(this.canvas_x - 6, this.canvas_y - 6,
+        (this.grid_width * size) + 12, (this.grid_height * size) + 12,
+        [0.08, 0.09, 0.13]);
+    canvas.strokeRect(this.canvas_x - 6, this.canvas_y - 6,
+        (this.grid_width * size) + 12, (this.grid_height * size) + 12,
+        [0.30, 0.34, 0.44], 1.0);
+
+    for (var y = 0; y < this.grid_height; y += 1) {
+      for (var x = 0; x < this.grid_width; x += 1) {
+        this.draw_canvas_cell(canvas, x, y);
+      }
+    }
+  }
+
+  draw_palette(canvas) {
+    var palette = this.current_palette();
+    var labels = this.current_labels();
+    canvas.textTop(this.panel_x, this.palette_y, "Pattern", [0.90, 0.93, 0.98], 15.0);
+
+    var x0 = this.panel_x + 16;
+    var y0 = this.palette_y + 46;
+    var width = this.panel_width - 32;
+    for (var i = 0; i < this.pattern_count(); i += 1) {
+      var y = y0 + (i * 40);
+      var color = palette[i];
+      canvas.fillRect(x0, y, 42, 28, color);
+      canvas.strokeRect(x0, y, 42, 28, [0.30, 0.34, 0.44], 1.0);
+
+      if (i == this.active_pattern) {
+        canvas.strokeRect(x0 - 3, y - 3, width, 34, [0.10, 0.78, 1.0], 2.0);
+      }
+      canvas.textTop(x0 + 54, y + 7, labels[i], [0.82, 0.86, 0.93], 12.0);
+    }
+  }
+
+  draw_preview_cell(canvas, x, y) {
+    var size = this.preview_cell;
+    var preview_x = this.panel_x + 16;
+    var preview_y = this.preview_y + 34;
+    canvas.fillRect(preview_x + (x * size), preview_y + (y * size),
+        size, size, this.cell_color(x, y));
+  }
+
+  draw_preview(canvas) {
+    var preview_x = this.panel_x + 16;
+    var preview_y = this.preview_y + 34;
+    var size = this.preview_cell;
+
+    canvas.textTop(this.panel_x, this.preview_y, "Preview", [0.90, 0.93, 0.98], 15.0);
+    canvas.fillRect(preview_x - 4, preview_y - 4,
+        (this.grid_width * size) + 8, (this.grid_height * size) + 8,
+        [0.04, 0.05, 0.07]);
+
+    for (var y = 0; y < this.grid_height; y += 1) {
+      for (var x = 0; x < this.grid_width; x += 1) {
+        this.draw_preview_cell(canvas, x, y);
+      }
+    }
+  }
+
+  color_text_color(index) {
+    if (index == 0 or index == 6 or index == 9 or index == 11) {
+      return [1.0, 1.0, 1.0];
+    }
+    return [0.05, 0.05, 0.08];
+  }
+
+  draw_color_dialog(canvas) {
+    var geometry = this.color_dialog_geometry();
+    var x = geometry["x"];
+    var y = geometry["y"];
+    var width = geometry["width"];
+    var height = geometry["height"];
+    var pattern = this.color_dialog_pattern;
+    var current = this.mc_color_indices[pattern];
+
+    canvas.fillRect(x, y, width, height, [0.08, 0.09, 0.13]);
+    canvas.strokeRect(x, y, width, height, [0.30, 0.34, 0.44], 2.0);
+    canvas.textTop(x + 20, y + 16,
+        "Choose C64 color for " + this.mc_labels[pattern],
+        [0.92, 0.95, 1.0], 18.0);
+    canvas.textTop(x + 20, y + 44,
+        "Current: " + current + ": " + this.c64_color_names[current],
+        [0.72, 0.78, 0.88], 12.0);
+
+    for (var i = 0; i < this.c64_palette.length(); i += 1) {
+      var rect = this.color_swatch_rect(i);
+      canvas.fillRect(rect["x"], rect["y"], rect["width"], rect["height"],
+          this.c64_palette[i]);
+      canvas.strokeRect(rect["x"], rect["y"], rect["width"], rect["height"],
+          [0.30, 0.34, 0.44], 1.0);
+      canvas.textTop(rect["x"] + 8, rect["y"] + 9,
+          i + ": " + this.c64_color_names[i], this.color_text_color(i), 11.0);
+
+      if (i == this.color_dialog_selection) {
+        canvas.strokeRect(rect["x"] - 3, rect["y"] - 3,
+            rect["width"] + 6, rect["height"] + 6, [0.10, 0.78, 1.0], 2.0);
+      }
+    }
+
+    canvas.textTop(x + 20, y + height - 12,
+        "Click swatch, arrows move, Enter selects, outside or Esc cancels",
+        [0.55, 0.60, 0.70], 11.0);
+  }
+
+  draw_dialog(canvas) {
+    var geometry = this.dialog_geometry();
+    var x = geometry["x"];
+    var y = geometry["y"];
+    var width = geometry["width"];
+    var height = geometry["height"];
+    var verb = this.dialog_mode == "save" ? "Save" : "Load";
+
+    canvas.fillRect(x, y, width, height, [0.08, 0.09, 0.13]);
+    canvas.strokeRect(x, y, width, height, [0.30, 0.34, 0.44], 2.0);
+    canvas.textTop(x + 20, y + 20, verb + " Sprite", [0.92, 0.95, 1.0], 18.0);
+    canvas.textTop(x + 20, y + 54, "Filename:", [0.72, 0.78, 0.88], 12.0);
+
+    this.paint_dialog_text(canvas);
+    canvas.textTop(x + 20, y + 140, "Enter: confirm    Esc: cancel", [0.55, 0.60, 0.70], 11.0);
+  }
+
+  render() {
+    this.canvas.render(fun(c) { this.draw(c); });
+    this.mark_clean();
+    return this;
+  }
+}

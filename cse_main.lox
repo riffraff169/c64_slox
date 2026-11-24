@@ -1,0 +1,81 @@
+#!/usr/bin/env slox
+// Launcher for the Cairo/X11 sprite editor.
+//
+//   slox cse_main.lox
+//   slox cse_main.lox --sprite sprite.bin
+//   slox cse_main.lox --png editor.png --sprite sprite.bin
+//
+// The --png form renders one offscreen frame and works without X11.
+require("cairo_sprite_editor.lox");
+
+fun print_usage() {
+  print "Usage: slox cse_main.lox [options]";
+  print "  --sprite PATH  Load a 64-byte sprite binary after startup";
+  print "  --png PATH     Render one offscreen frame instead of opening a window";
+  print "  -h, --help     Show this help";
+}
+
+var sprite_path = nil;
+var png_path = nil;
+var args = System.ARGS;
+var i = 0;
+
+while (i < args.length()) {
+  var arg = args[i];
+  if (arg == "--sprite") {
+    if (i + 1 >= args.length()) {
+      print "Error: --sprite requires a path.";
+      print_usage();
+      System.exit(1);
+    }
+    i = i + 1;
+    sprite_path = args[i];
+  } else if (arg == "--png") {
+    if (i + 1 >= args.length()) {
+      print "Error: --png requires a path.";
+      print_usage();
+      System.exit(1);
+    }
+    i = i + 1;
+    png_path = args[i];
+  } else if (arg == "-h" or arg == "--help") {
+    print_usage();
+    System.exit(0);
+  } else {
+    print "Error: unknown option '" + arg + "'.";
+    print_usage();
+    System.exit(1);
+  }
+  i = i + 1;
+}
+
+var canvas;
+if (png_path != nil) {
+  canvas = Canvas.offscreen(960, 720);
+} else {
+  canvas = Canvas.window(960, 720, "Slox Sprite Editor (Cairo)");
+}
+
+var editor = CairoSpriteEditor(canvas);
+
+if (sprite_path != nil) {
+  if (!editor.load_sprite(sprite_path)) {
+    canvas.close();
+    System.exit(1);
+  }
+}
+
+if (png_path != nil) {
+  editor.render();
+  var status = canvas.savePng(png_path);
+  print "Wrote " + png_path + " (status " + status + ")";
+  canvas.close();
+} else {
+  canvas.on("event", fun(c, event) { editor.handle_event(event); });
+  canvas.run(fun(c) {
+    if (!editor.needs_repaint()) return;
+    editor.draw(c);
+    editor.mark_clean();
+  }, {"fps": 60});
+  canvas.close();
+}

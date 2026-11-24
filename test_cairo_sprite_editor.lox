@@ -1,0 +1,262 @@
+require("cairo_sprite_editor.lox");
+
+var canvas = Canvas.offscreen(900, 700);
+var editor = CairoSpriteEditor(canvas);
+
+print editor.grid_width; // expect: 24
+print editor.grid_height; // expect: 21
+print editor.needs_repaint(); // expect: true
+print editor.preview_y; // expect: 360
+print editor.is_multicolor; // expect: false
+print editor.active_pattern; // expect: 0
+
+print editor.select_pattern(1); // expect: true
+editor.set_pixel(0, 0);
+editor.set_pixel(7, 0);
+editor.set_pixel(8, 0);
+print editor.get_pixel(0, 0); // expect: 1
+print editor.get_pixel(7, 0); // expect: 1
+print editor.get_pixel(8, 0); // expect: 1
+
+var mono_bytes = editor.pack_sprite();
+print mono_bytes.length(); // expect: 64
+print mono_bytes[0]; // expect: 129
+print mono_bytes[1]; // expect: 128
+print mono_bytes[63]; // expect: 0
+
+var sprite_path = "/tmp/opencode/test_cairo_sprite_editor.bin";
+print editor.save_sprite(sprite_path); // expect: true
+var loaded = CairoSpriteEditor(Canvas.offscreen(900, 700));
+print loaded.load_sprite(sprite_path); // expect: true
+print loaded.get_pixel(0, 0); // expect: 1
+print loaded.get_pixel(7, 0); // expect: 1
+print loaded.get_pixel(8, 0); // expect: 1
+
+editor.toggle_mode();
+print editor.is_multicolor; // expect: true
+print editor.get_pixel(0, 0); // expect: 2
+print editor.get_pixel(1, 0); // expect: 2
+print editor.get_pixel(6, 0); // expect: 1
+print editor.get_pixel(7, 0); // expect: 1
+print editor.get_pixel(8, 0); // expect: 2
+print editor.select_pattern(2); // expect: true
+editor.set_pixel(1, 1);
+print editor.get_pixel(0, 1); // expect: 2
+print editor.get_pixel(1, 1); // expect: 2
+
+var mc_bytes = editor.pack_sprite();
+print mc_bytes.length(); // expect: 64
+print mc_bytes[3]; // expect: 128
+
+var mc_loaded = CairoSpriteEditor(Canvas.offscreen(900, 700));
+mc_loaded.toggle_mode();
+print mc_loaded.unpack_sprite(mc_bytes); // expect: true
+print mc_loaded.get_pixel(0, 1); // expect: 2
+print mc_loaded.get_pixel(1, 1); // expect: 2
+
+editor.toggle_mode();
+print editor.is_multicolor; // expect: false
+print editor.active_pattern; // expect: 1
+print editor.get_pixel(0, 0); // expect: 1
+print editor.get_pixel(1, 0); // expect: 0
+print editor.get_pixel(6, 0); // expect: 0
+print editor.get_pixel(7, 0); // expect: 1
+print editor.get_pixel(8, 0); // expect: 1
+print editor.get_pixel(0, 1); // expect: 1
+print editor.get_pixel(1, 1); // expect: 0
+
+print editor.canvas_cell_at(24, 130); // expect: [0, 0]
+print editor.palette_index_at(608, 176); // expect: 0
+print editor.button_at(30, 80); // expect: Mode (M)
+
+editor.handle_event({"type": X11.KeyPress, "keysym": 0, "text": "m"});
+print editor.is_multicolor; // expect: true
+editor.handle_event({"type": X11.KeyPress, "keysym": 0, "text": "1"});
+print editor.active_pattern; // expect: 0
+
+editor.render();
+print editor.needs_repaint(); // expect: false
+var expose_before = editor.expose_region_repaints;
+editor.handle_event({"type": X11.Expose, "x": 20, "y": 120,
+  "width": 100, "height": 100});
+print editor.needs_repaint(); // expect: false
+print editor.expose_region_repaints - expose_before; // expect: 1
+editor.handle_event({"type": X11.Expose, "x": 0, "y": 0,
+  "width": 0, "height": 0});
+print editor.needs_repaint(); // expect: false
+print editor.expose_region_repaints - expose_before; // expect: 1
+
+editor.open_dialog("save");
+print editor.needs_repaint(); // expect: true
+editor.render();
+print editor.needs_repaint(); // expect: false
+editor.handle_event({"type": X11.KeyPress, "keysym": 0, "text": "a"});
+print "[" + editor.dialog_text + "]"; // expect: [a]
+print editor.needs_repaint(); // expect: false
+print editor.dialog_text_draws; // expect: 1
+editor.handle_event({"type": X11.KeyPress, "keysym": X11.XK_BackSpace, "text": ""});
+print "[" + editor.dialog_text + "]"; // expect: []
+print editor.needs_repaint(); // expect: false
+print editor.dialog_text_draws; // expect: 2
+editor.handle_event({"type": X11.KeyPress, "keysym": X11.XK_Escape, "text": ""});
+print editor.needs_repaint(); // expect: true
+editor.render();
+
+var mc_click_before = editor.incremental_cell_repaints;
+editor.handle_event({"type": X11.ButtonPress, "button": 1, "x": 24, "y": 130});
+editor.handle_event({"type": X11.ButtonRelease, "button": 1, "x": 24, "y": 130});
+print editor.needs_repaint(); // expect: false
+print editor.incremental_cell_repaints - mc_click_before; // expect: 1
+print editor.get_pixel(0, 0); // expect: 0
+print editor.get_pixel(1, 0); // expect: 0
+
+editor.handle_event({"type": X11.KeyPress, "keysym": 0, "text": "m"});
+editor.select_pattern(1);
+editor.render();
+var mono_click_before = editor.incremental_cell_repaints;
+editor.handle_event({"type": X11.ButtonPress, "button": 1, "x": 24, "y": 140});
+editor.handle_event({"type": X11.ButtonRelease, "button": 1, "x": 24, "y": 140});
+print editor.needs_repaint(); // expect: false
+print editor.incremental_cell_repaints - mono_click_before; // expect: 1
+print editor.get_pixel(0, 0); // expect: 1
+print editor.get_pixel(1, 0); // expect: 0
+
+var color_canvas = Canvas.offscreen(900, 700);
+var color_editor = CairoSpriteEditor(color_canvas);
+print color_editor.c64_palette.length(); // expect: 16
+print color_editor.c64_palette[2]; // expect: [136, 0, 0]
+print color_editor.c64_palette[14]; // expect: [0, 136, 255]
+print color_editor.mc_color_indices[1]; // expect: 1
+print color_editor.mc_color_indices[2]; // expect: 5
+print color_editor.mc_color_indices[3]; // expect: 14
+print color_editor.color_dialog_clear_rect()["x"]; // expect: 236
+print color_editor.color_dialog_clear_rect()["y"]; // expect: 226
+print color_editor.color_dialog_clear_rect()["width"]; // expect: 488
+print color_editor.color_dialog_clear_rect()["height"]; // expect: 258
+
+color_editor.toggle_mode();
+color_editor.select_pattern(2);
+color_editor.set_pixel(0, 0);
+print color_editor.get_pixel(0, 0); // expect: 2
+print color_editor.pack_sprite()[0]; // expect: 128
+color_editor.render();
+print color_editor.needs_repaint(); // expect: false
+
+var pattern_repaints_before = color_editor.incremental_cell_repaints;
+print color_editor.apply_color(2, 8); // expect: true
+print color_editor.mc_color_indices[2]; // expect: 8
+print color_editor.mc_palette[2]; // expect: [221, 136, 85]
+print color_editor.incremental_cell_repaints - pattern_repaints_before; // expect: 1
+print color_editor.pack_sprite()[0]; // expect: 128
+print color_editor.apply_color(0, 3); // expect: false
+print color_editor.apply_color(1, 16); // expect: false
+
+print color_editor.button_at(570, 80); // expect: Colors (P)
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 570, "y": 80});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 570, "y": 80});
+print color_editor.color_dialog_pattern; // expect: 2
+print color_editor.color_dialog_selection; // expect: 8
+print color_editor.color_dialog_repaints; // expect: 0
+color_editor.render();
+print color_editor.needs_repaint(); // expect: false
+
+color_editor.handle_event({"type": X11.KeyPress,
+  "keysym": X11.XK_Right, "text": ""});
+print color_editor.color_dialog_selection; // expect: 9
+print color_editor.needs_repaint(); // expect: false
+print color_editor.color_dialog_repaints; // expect: 1
+
+var color_swatch = color_editor.color_swatch_rect(3);
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": color_swatch["x"] + 5, "y": color_swatch["y"] + 5});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": color_swatch["x"] + 5, "y": color_swatch["y"] + 5});
+print color_editor.color_dialog_pattern; // expect: nil
+print color_editor.mc_color_indices[2]; // expect: 3
+print color_editor.needs_repaint(); // expect: false
+print color_editor.status_line_repaints; // expect: 1
+print color_editor.color_dialog_close_repaints; // expect: 1
+print color_editor.pack_sprite()[0]; // expect: 128
+
+color_editor.select_pattern(0);
+color_editor.handle_event({"type": X11.KeyPress, "keysym": 0, "text": "p"});
+print color_editor.color_dialog_pattern; // expect: nil
+print color_editor.status; // expect: Select pattern 01, 10, or 11 before choosing a color
+
+color_editor.select_pattern(2);
+color_editor.render();
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 24, "y": 130});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 24, "y": 130});
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 24, "y": 130});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 24, "y": 130});
+print color_editor.color_dialog_pattern; // expect: nil
+print color_editor.last_pattern_click; // expect: nil
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 69, "y": 130});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 69, "y": 130});
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 69, "y": 130});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 69, "y": 130});
+print color_editor.color_dialog_pattern; // expect: nil
+print color_editor.last_pattern_click; // expect: nil
+
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 608, "y": 221});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 608, "y": 221});
+print color_editor.last_pattern_click; // expect: palette:1
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 24, "y": 130});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 24, "y": 130});
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 24, "y": 130});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 24, "y": 130});
+print color_editor.color_dialog_pattern; // expect: nil
+print color_editor.last_pattern_click; // expect: nil
+
+color_editor.render();
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 608, "y": 221});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 608, "y": 221});
+print color_editor.active_pattern; // expect: 1
+print color_editor.color_dialog_pattern; // expect: nil
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 608, "y": 221});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 608, "y": 221});
+print color_editor.color_dialog_pattern; // expect: 1
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 10, "y": 200});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 10, "y": 200});
+print color_editor.color_dialog_pattern; // expect: nil
+print color_editor.color_dialog_close_repaints; // expect: 2
+
+color_editor.render();
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 608, "y": 181});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 608, "y": 181});
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 608, "y": 181});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 608, "y": 181});
+print color_editor.active_pattern; // expect: 0
+print color_editor.color_dialog_pattern; // expect: nil
+
+print canvas.isOffscreen(); // expect: true
+print canvas.savePng("/tmp/opencode/test_cairo_sprite_editor.png"); // expect: 0
+
+color_canvas.close();
+canvas.close();

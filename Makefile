@@ -4,7 +4,10 @@ OUT ?=
 BUILD_DIR ?= build
 SOURCES ?= sample.a64 constants.a64
 
-.PHONY: all test asm samples clean help
+PNG ?= editor.png
+SPRITE ?=
+
+.PHONY: all test asm samples cairo-editor cairo-editor-png clean help
 
 all: test
 
@@ -14,6 +17,8 @@ help:
 	@echo "  make asm SRC=file.a64        Assemble one source file"
 	@echo "  make asm SRC=file.a64 OUT=x  Assemble to a specific output path"
 	@echo "  make samples                 Assemble sample sources into build/"
+	@echo "  make cairo-editor            Launch the Cairo/X11 sprite editor"
+	@echo "  make cairo-editor-png        Render one editor frame to PNG=$(PNG)"
 	@echo "  make clean                   Remove build/"
 
 test:
@@ -31,6 +36,12 @@ samples: | $(BUILD_DIR)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
+
+cairo-editor:
+	$(SLOX_BIN) cse_main.lox $(if $(SPRITE),--sprite $(SPRITE),)
+
+cairo-editor-png:
+	$(SLOX_BIN) cse_main.lox --png $(PNG) $(if $(SPRITE),--sprite $(SPRITE),)
 
 clean:
 	rm -rf $(BUILD_DIR)

@@ -7,8 +7,10 @@ A small 6502 assembler and Commodore 64 tooling project written in slox.
 - slox 1.13 or newer
 - The slox runtime libraries `argparser.lox`, `color.lox`, `multiffi.lox`, and
   `notcurses.lox` on the slox include path
+- For the Cairo editor: the runtime libraries `canvas.lox`, `cairo.lox`, and
+  `x11.lox`, plus libcairo and X11 at runtime
 
-The assembler does not depend on `logger.lox`; the TUI components do.
+The assembler does not depend on `logger.lox`; the notcurses TUI components do.
 
 ## Assembler
 
@@ -52,17 +54,62 @@ Diagnostics are emitted from every pipeline stage, including the preprocessor,
 with a non-zero status before writing output files when any error is reported,
 and prints a summary when errors or warnings were seen.
 
+## Sprite editors
+
+### Cairo/X11 editor
+
+```sh
+slox cse_main.lox
+slox cse_main.lox --sprite sprite.bin
+slox cse_main.lox --png editor.png --sprite sprite.bin
+```
+
+`cse_main.lox` opens a 960x720 Cairo canvas. `--sprite` loads an existing
+64-byte raw sprite binary at startup, and `--png` renders one offscreen frame
+without opening an X11 window. The editor panel provides mode switching,
+pattern selection, save/load dialogs, clear, and quit.
+
+Controls:
+
+- Click the canvas to paint; click a pattern row to select it
+- `M` switches between single-color and multicolor mode
+- `1`-`4` select a pattern (`3` and `4` are multicolor only)
+- `P` or the Colors button opens the color picker for the active multicolor pattern
+- In multicolor mode, clicking the same pattern row in the list twice opens its
+  color picker; pattern `00` has no color picker
+- Clicking sprite cells only paints; it never opens the color picker
+- `S` / `L` open the save/load filename dialog
+- `C` clears the sprite, `Q` or `Esc` quits
+
+Saved sprites use the C64 layout: three bytes per row for 21 rows plus one
+padding byte. Single-color mode packs eight 1-bit pixels per byte. Multicolor
+mode packs four 2-bit horizontal pixel pairs per byte. Switching modes
+converts existing pixels: adjacent single-color bits become multicolor
+patterns (on/blank becomes `10: Primary`), and switching back restores the
+individual bits. The window redraws only when editor state changes; canvas
+clicks update just the affected sprite/preview cells, expose events redraw only
+the reported region, and dialog typing updates just the filename field.
+
+The color picker offers the 16 standard C64 colors for patterns `01`, `10`, and
+`11`. Click a swatch to apply it, or use the arrow keys and `Enter`. Clicking
+outside the picker or pressing `Esc` closes it without applying a color. Color
+choices only affect the editor preview: saved sprites contain bit patterns only,
+and the colors are defined by the program that displays them.
+
+The original notcurses editor is unchanged and remains available through
+`slox se_main.lox`.
+
 ## Supported directives
 
-- `.BASIC` — BASIC SYS header before the machine-code payload
-- `.BYTE expr[, expr ...]` — emit byte values or expressions
-- `.WORD expr[, expr ...]` — emit 16-bit little-endian values
-- `.TEXT "text"` / `.STRING "text"` — emit raw string bytes
-- `.ALIGN boundary` — pad to the next boundary
-- `.FILL count[, byte]` — emit `count` copies of `byte` (default `$00`)
-- `.RES count[, byte]` — reserve bytes, equivalent to `.FILL`
-- `.INCBIN "file"[, offset[, length]]` / `.INCLUDEBIN ...` — include raw bytes
-- `.INCLUDE "file"` — assemble another source file at this point
+- `.BASIC` - BASIC SYS header before the machine-code payload
+- `.BYTE expr[, expr ...]` - emit byte values or expressions
+- `.WORD expr[, expr ...]` - emit 16-bit little-endian values
+- `.TEXT "text"` / `.STRING "text"` - emit raw string bytes
+- `.ALIGN boundary` - pad to the next boundary
+- `.FILL count[, byte]` - emit `count` copies of `byte` (default `$00`)
+- `.RES count[, byte]` - reserve bytes, equivalent to `.FILL`
+- `.INCBIN "file"[, offset[, length]]` / `.INCLUDEBIN ...` - include raw bytes
+- `.INCLUDE "file"` - assemble another source file at this point
 
 Constants can be declared with `NAME = expr`, `NAME EQU expr`, or
 `NAME .EQU expr`. The program origin is set with `* = $addr`.
@@ -142,9 +189,11 @@ A small `Makefile` wraps the common commands:
 
 ```sh
 make test                       # run the test suite
-make asm SRC=sprite1.a64        # assemble one source to its default .prg
-make asm SRC=sprite1.a64 OUT=/tmp/sprite1.prg
+make asm SRC=constants.a64      # assemble one source to its default .prg
+make asm SRC=constants.a64 OUT=/tmp/constants.prg
 make samples                    # assemble sample sources into build/
+make cairo-editor               # launch the Cairo/X11 sprite editor
+make cairo-editor-png           # render one editor frame to editor.png
 make clean                      # remove build/
 ```
 
