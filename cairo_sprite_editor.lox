@@ -38,6 +38,8 @@ class CairoSpriteEditor {
     this.dialog_text_draws = 0;
     this.pressed_button = nil;
     this.needs_paint = true;
+    this.incremental_cell_repaints = 0;
+    this.expose_region_repaints = 0;
 
     this.compute_layout();
     this.build_buttons();
@@ -84,6 +86,36 @@ class CairoSpriteEditor {
 
   mark_clean() {
     this.needs_paint = false;
+  }
+
+  repaint_cells(y, xs) {
+    if (this.needs_paint) {
+      this.render();
+      return;
+    }
+
+    for (var i = 0; i < xs.length(); i += 1) {
+      this.draw_canvas_cell(this.canvas, xs[i], y);
+      this.draw_preview_cell(this.canvas, xs[i], y);
+    }
+    this.canvas.present();
+    this.incremental_cell_repaints = this.incremental_cell_repaints + 1;
+  }
+
+  repaint_region(x, y, width, height) {
+    if (this.needs_paint or width == nil or height == nil or
+        width <= 0 or height <= 0) {
+      this.render();
+      return;
+    }
+
+    this.canvas.save();
+    this.canvas.clipRect(x, y, width, height);
+    this.draw(this.canvas);
+    this.canvas.restore();
+    this.canvas.present();
+    this.expose_region_repaints = this.expose_region_repaints + 1;
+    this.mark_clean();
   }
 
   set_status(message) {
@@ -155,15 +187,23 @@ class CairoSpriteEditor {
   set_pixel(x, y) {
     if (x < 0 or x >= this.grid_width or y < 0 or y >= this.grid_height) return false;
 
+    var xs = [];
     if (!this.is_multicolor) {
-      this.pixels[y][x] = this.active_pattern != 0 ? 1 : 0;
+      var value = this.active_pattern != 0 ? 1 : 0;
+      if (this.pixels[y][x] == value) return false;
+      this.pixels[y][x] = value;
+      xs.push(x);
     } else {
       var pair_x = x - (x % 2);
       var pattern = this.active_pattern & 3;
+      if (this.pixels[y][pair_x] == pattern and
+          this.pixels[y][pair_x + 1] == pattern) return false;
       this.pixels[y][pair_x] = pattern;
       this.pixels[y][pair_x + 1] = pattern;
+      xs.push(pair_x);
+      xs.push(pair_x + 1);
     }
-    this.request_repaint();
+    this.repaint_cells(y, xs);
     return true;
   }
 
@@ -411,7 +451,7 @@ class CairoSpriteEditor {
   handle_event(event) {
     var type = event["type"];
     if (type == X11.Expose) {
-      this.request_repaint();
+      this.repaint_region(event["x"], event["y"], event["width"], event["height"]);
       return;
     }
 
@@ -434,20 +474,21 @@ class CairoSpriteEditor {
 
     if (type == X11.ButtonPress) {
       this.pressed_button = this.button_at(px, py);
-      this.request_repaint();
+      if (this.pressed_button != nil) this.request_repaint();
       return;
     }
 
     if (type != X11.ButtonRelease) return;
-    this.request_repaint();
 
+    var was_pressed = this.pressed_button;
+    this.pressed_button = nil;
     var released = this.button_at(px, py);
-    if (released != nil and released == this.pressed_button) {
-      this.pressed_button = nil;
+    if (released != nil and released == was_pressed) {
+      this.request_repaint();
       this.activate_button(released);
       return;
     }
-    this.pressed_button = nil;
+    if (was_pressed != nil) this.request_repaint();
 
     var palette_index = this.palette_index_at(px, py);
     if (palette_index != nil) {
@@ -500,6 +541,21 @@ class CairoSpriteEditor {
     }
   }
 
+  cell_color(x, y) {
+    var value = this.pixels[y][x];
+    var palette = this.current_palette();
+    if (this.is_multicolor) return palette[value & 3];
+    return palette[value != 0 ? 1 : 0];
+  }
+
+  draw_canvas_cell(canvas, x, y) {
+    var size = this.cell_size;
+    var px = this.canvas_x + (x * size);
+    var py = this.canvas_y + (y * size);
+    canvas.fillRect(px, py, size, size, this.cell_color(x, y));
+    canvas.strokeRect(px, py, size, size, [0.18, 0.20, 0.27], 0.5);
+  }
+
   draw_canvas(canvas) {
     var size = this.cell_size;
     canvas.fillRect(this.canvas_x - 6, this.canvas_y - 6,
@@ -509,18 +565,9 @@ class CairoSpriteEditor {
         (this.grid_width * size) + 12, (this.grid_height * size) + 12,
         [0.30, 0.34, 0.44], 1.0);
 
-    var palette = this.current_palette();
     for (var y = 0; y < this.grid_height; y += 1) {
       for (var x = 0; x < this.grid_width; x += 1) {
-        var value = this.pixels[y][x];
-        var color = palette[0];
-        if (this.is_multicolor) color = palette[value & 3];
-        else if (value != 0) color = palette[1];
-
-        var px = this.canvas_x + (x * size);
-        var py = this.canvas_y + (y * size);
-        canvas.fillRect(px, py, size, size, color);
-        canvas.strokeRect(px, py, size, size, [0.18, 0.20, 0.27], 0.5);
+        this.draw_canvas_cell(canvas, x, y);
       }
     }
   }
@@ -546,11 +593,18 @@ class CairoSpriteEditor {
     }
   }
 
+  draw_preview_cell(canvas, x, y) {
+    var size = this.preview_cell;
+    var preview_x = this.panel_x + 16;
+    var preview_y = this.preview_y + 34;
+    canvas.fillRect(preview_x + (x * size), preview_y + (y * size),
+        size, size, this.cell_color(x, y));
+  }
+
   draw_preview(canvas) {
     var preview_x = this.panel_x + 16;
     var preview_y = this.preview_y + 34;
     var size = this.preview_cell;
-    var palette = this.current_palette();
 
     canvas.textTop(this.panel_x, this.preview_y, "Preview", [0.90, 0.93, 0.98], 15.0);
     canvas.fillRect(preview_x - 4, preview_y - 4,
@@ -559,12 +613,7 @@ class CairoSpriteEditor {
 
     for (var y = 0; y < this.grid_height; y += 1) {
       for (var x = 0; x < this.grid_width; x += 1) {
-        var value = this.pixels[y][x];
-        var color = palette[0];
-        if (this.is_multicolor) color = palette[value & 3];
-        else if (value != 0) color = palette[1];
-        canvas.fillRect(preview_x + (x * size), preview_y + (y * size),
-            size, size, color);
+        this.draw_preview_cell(canvas, x, y);
       }
     }
   }
