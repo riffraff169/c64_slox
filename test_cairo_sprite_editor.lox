@@ -5,6 +5,7 @@ var editor = CairoSpriteEditor(canvas);
 
 print editor.grid_width; // expect: 24
 print editor.grid_height; // expect: 21
+print editor.needs_repaint(); // expect: true
 print editor.is_multicolor; // expect: false
 print editor.active_pattern; // expect: 0
 
@@ -61,6 +62,11 @@ editor.handle_event({"type": X11.KeyPress, "keysym": 0, "text": "1"});
 print editor.active_pattern; // expect: 0
 
 editor.render();
+print editor.needs_repaint(); // expect: false
+editor.handle_event({"type": X11.Expose});
+print editor.needs_repaint(); // expect: true
+editor.render();
+print editor.needs_repaint(); // expect: false
 print canvas.isOffscreen(); // expect: true
 print canvas.savePng("/tmp/opencode/test_cairo_sprite_editor.png"); // expect: 0
 

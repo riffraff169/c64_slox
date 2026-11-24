@@ -36,6 +36,7 @@ class CairoSpriteEditor {
     this.dialog_mode = nil;
     this.dialog_text = "";
     this.pressed_button = nil;
+    this.needs_paint = true;
 
     this.compute_layout();
     this.build_buttons();
@@ -72,8 +73,21 @@ class CairoSpriteEditor {
     ];
   }
 
+  needs_repaint() {
+    return this.needs_paint;
+  }
+
+  request_repaint() {
+    this.needs_paint = true;
+  }
+
+  mark_clean() {
+    this.needs_paint = false;
+  }
+
   set_status(message) {
     this.status = message;
+    this.request_repaint();
   }
 
   current_palette() {
@@ -124,6 +138,7 @@ class CairoSpriteEditor {
       this.pixels[y][pair_x] = pattern;
       this.pixels[y][pair_x + 1] = pattern;
     }
+    this.request_repaint();
     return true;
   }
 
@@ -180,6 +195,7 @@ class CairoSpriteEditor {
         }
       }
     }
+    this.request_repaint();
     return true;
   }
 
@@ -251,9 +267,11 @@ class CairoSpriteEditor {
   close_dialog() {
     this.dialog_mode = nil;
     this.dialog_text = "";
+    this.request_repaint();
   }
 
   handle_dialog_key(event) {
+    this.request_repaint();
     var keysym = event["keysym"];
     if (keysym == X11.XK_Return or keysym == X11.XK_KP_Enter) {
       var filepath = this.dialog_text;
@@ -297,6 +315,7 @@ class CairoSpriteEditor {
   }
 
   handle_key(event) {
+    this.request_repaint();
     var keysym = event["keysym"];
     if (this.dialog_mode != nil) {
       this.handle_dialog_key(event);
@@ -334,6 +353,17 @@ class CairoSpriteEditor {
 
   handle_event(event) {
     var type = event["type"];
+    if (type == X11.Expose) {
+      this.request_repaint();
+      return;
+    }
+
+    if (type == X11.ConfigureNotify) {
+      this.compute_layout();
+      this.request_repaint();
+      return;
+    }
+
     if (type == X11.KeyPress) {
       this.handle_key(event);
       return;
@@ -347,10 +377,12 @@ class CairoSpriteEditor {
 
     if (type == X11.ButtonPress) {
       this.pressed_button = this.button_at(px, py);
+      this.request_repaint();
       return;
     }
 
     if (type != X11.ButtonRelease) return;
+    this.request_repaint();
 
     var released = this.button_at(px, py);
     if (released != nil and released == this.pressed_button) {
@@ -500,6 +532,7 @@ class CairoSpriteEditor {
 
   render() {
     this.canvas.render(fun(c) { this.draw(c); });
+    this.mark_clean();
     return this;
   }
 }
