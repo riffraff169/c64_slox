@@ -1,37 +1,33 @@
 require("scanner.lox");
 require("c64_parser.lox");
-require("opcodes.lox"); // Contains OPCODES table
+require("opcodes.lox");
 require("pass1.lox");
 
 var source = "* = $0801\n" +
-             "main:\n" +
+             "start:\n" +
              "  LDA #$00\n" +
-             "  STA $D020\n" +
              "loop:\n" +
-             "  INC $D020\n" +
-             "  JMP loop\n" +
+             "  STA $d020\n" +
              "  RTS\n";
 
-var scanner = AssemblyScanner(source);
-var tokens = scanner.scanTokens();
-
-var parser = AssemblyParser(tokens);
-var statements = parser.parse();
-
-var pass1 = Pass1(statements, OPCODES);
-var result = pass1.run();
-
-print "=== SYMBOL TABLE ===";
+var tokens = AssemblyScanner(source).scanTokens();
+var statements = AssemblyParser(tokens).parse();
+var result = Pass1(statements, OPCODES).run();
 var symbols = result["symbolTable"];
-symbols.keys().each(fun(key) {
-  print key + " -> $" + symbols[key]; // Helper to display hex address
-});
 
+print Math.hex(result["startAddress"], 4, false); // expect: 0801
+print Math.hex(result["endPC"], 4, false); // expect: 0807
+print Math.hex(symbols["start"], 4, false); // expect: 0801
+print Math.hex(symbols["loop"], 4, false); // expect: 0803
 
-print "\n=== STATEMENT PC LAYOUT ===";
 for (var i = 0; i < result["statements"].length(); i += 1) {
-  var s = result["statements"][i];
-  print "$" + s.pc + " [" + s.size + "B] " + s;
+  var stmt = result["statements"][i];
+  print Math.hex(stmt.pc, 4, false) + ":" + stmt.size + ":" + stmt.type + ":" + stmt.name;
 }
 
-print result["statements"][0];
+// expect: 0801:0:ORIGIN:*=
+// expect: 0801:0:LABEL_ONLY:
+// expect: 0801:2:INSTRUCTION:LDA
+// expect: 0803:0:LABEL_ONLY:
+// expect: 0803:3:INSTRUCTION:STA
+// expect: 0806:1:INSTRUCTION:RTS

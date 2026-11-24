@@ -31,8 +31,8 @@ class Pass1 {
           return;
         }
         var val = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
-        this.currenPC = val;
-        stmt.pc = this.currentPC;
+        this.currentPC = val;
+        stmt.pc = val;
         stmt.size = 0;
         this.hasOrigin = true;
         continue;
@@ -73,7 +73,7 @@ class Pass1 {
           stmt.pc = this.currentPC;
           stmt.size = padding;
           this.currentPC += padding;
-        } else if (dirName == ".FILL") {
+        } else if (dirName == ".FILL" or dirName == ".RES") {
           var count = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
 
           stmt.pc = this.currentPC;
@@ -91,13 +91,14 @@ class Pass1 {
     }
 
     var startPC = 0x0801;
-    if (this.statements.length() > 0) {
+    if (this.statements.length() > 0 and this.statements[0].pc != nil) {
       startPC = this.statements[0].pc;
     }
 
     return {
       "symbolTable": this.symbolTable,
       "statements": this.statements,
+      "startAddress": startPC,
       "startPC": startPC,
       "endPC": this.currentPC
     };
@@ -112,7 +113,7 @@ class Pass1 {
     print stmt.operand;
     print val;
     */
-    if (val and val >= 0 and val <= 255) {
+    if (val != nil and val >= 0 and val <= 255) {
       if (stmt.mode == AddressingMode.ABSOLUTE and this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE)) {
         stmt.mode = AddressingMode.ZERO_PAGE;
         return 2;
@@ -183,7 +184,7 @@ class Pass1 {
     if (str[0] == '<' or str[0] == '>') {
       var innerVal = this.parseOperandValue(str.slice(1));
       if (innerVal != nil) {
-        return (str[0] == '<') ? (innerVal % 256) : (innterVal / 256).floor();
+        return (str[0] == '<') ? (innerVal % 256) : (innerVal / 256).floor();
       }
     }
 
@@ -196,7 +197,7 @@ class Pass1 {
       }
     }
     if (isDec) {
-      return Number(str);
+      return Integer(str);
     }
 
     return nil;
@@ -214,18 +215,17 @@ class Pass1 {
       if (typeof(stmt.operand) == "Array") return stmt.operand.length() * 2;
       return 2;
     }
-    if (name == ".TEXT" or stmt.name.to_upper() == ".STRING") {
+    if (name == ".TEXT" or name == ".STRING") {
       return stmt.operand.length();
     }
     if (name == ".ALIGN") {
       var boundary = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
       if (boundary <= 0) boundary = 1;
-      var remainder = currentPC % boundary;
+      var remainder = this.currentPC % boundary;
       return (remainder == 0) ? 0 : (boundary - remainder);
     }
-    if (name == ".FILL") {
-      return evaluator.evaluate(stmt.operand, this.symbolTable, currentPC);
-      return count;
+    if (name == ".FILL" or name == ".RES") {
+      return evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
     }
 
     if (name == ".INCBIN" or name == ".INCLUDEBIN") {

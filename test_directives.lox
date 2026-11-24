@@ -1,0 +1,36 @@
+require("scanner.lox");
+require("c64_parser.lox");
+require("opcodes.lox");
+require("pass1.lox");
+require("pass2.lox");
+
+var binaryPath = "/tmp/slox_c64_test_incbin.bin";
+File.save(binaryPath, [0x00, 0xff, 0x41].to_string());
+
+var source = "* = $0801\n" +
+             "start:\n" +
+             "  .byte 0, $ff, 65\n" +
+             "  .word $1234, start\n" +
+             "  .text \"HI\"\n" +
+             "  .res 3\n" +
+             "  .fill 2, $aa\n" +
+             "  .incbin \"" + binaryPath + "\", 1, 2\n";
+
+var tokens = AssemblyScanner(source).scanTokens();
+var statements = AssemblyParser(tokens).parse();
+var pass1Result = Pass1(statements, OPCODES).run();
+var pass2Result = Pass2(
+    pass1Result["statements"],
+    pass1Result["symbolTable"],
+    OPCODES,
+    pass1Result["startAddress"]
+).run(nil);
+
+var bytes = pass2Result["bytes"];
+var hexString = "";
+for (var i = 0; i < bytes.length(); i += 1) {
+  if (i > 0) hexString = hexString + " ";
+  hexString = hexString + Math.hex(bytes[i], 2, false).to_upper();
+}
+
+print hexString; // expect: 00 FF 41 34 12 01 08 48 49 00 00 00 AA AA FF 41

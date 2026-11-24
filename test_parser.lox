@@ -1,15 +1,24 @@
 require("scanner.lox");
 require("c64_parser.lox");
 
-var source = File.load("sample.a64");
-
-var scanner = AssemblyScanner(source);
-var tokens = scanner.scanTokens();
-
-var parser = AssemblyParser(tokens);
-var statements = parser.parse();
-
-print "=== PARSED STATEMENTS ===";
-for (var i = 0; i < statements.length(); i += 1) {
-  print statements[i];
+fun show(value) {
+  return value == nil ? "-" : "" + value;
 }
+
+var source = "* = $0801\n" +
+             "start:\n" +
+             "  LDA #$00\n" +
+             "  .text \"HI\"\n";
+
+var tokens = AssemblyScanner(source).scanTokens();
+var statements = AssemblyParser(tokens).parse();
+
+for (var i = 0; i < statements.length(); i += 1) {
+  var stmt = statements[i];
+  print show(stmt.type) + "|" + show(stmt.label) + "|" + show(stmt.name) + "|" + show(stmt.mode) + "|" + show(stmt.operand);
+}
+
+// expect: ORIGIN|-|*=|IMMEDIATE|2049
+// expect: LABEL_ONLY|start||-|-
+// expect: INSTRUCTION|-|LDA|IMMEDIATE|0
+// expect: DIRECTIVE|-|.TEXT|-|HI
