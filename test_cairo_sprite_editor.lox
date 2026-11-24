@@ -129,6 +129,10 @@ print color_editor.c64_palette[14]; // expect: [0, 136, 255]
 print color_editor.mc_color_indices[1]; // expect: 1
 print color_editor.mc_color_indices[2]; // expect: 5
 print color_editor.mc_color_indices[3]; // expect: 14
+print color_editor.color_dialog_clear_rect()["x"]; // expect: 236
+print color_editor.color_dialog_clear_rect()["y"]; // expect: 226
+print color_editor.color_dialog_clear_rect()["width"]; // expect: 488
+print color_editor.color_dialog_clear_rect()["height"]; // expect: 258
 
 color_editor.toggle_mode();
 color_editor.select_pattern(2);
@@ -173,6 +177,7 @@ print color_editor.color_dialog_pattern; // expect: nil
 print color_editor.mc_color_indices[2]; // expect: 3
 print color_editor.needs_repaint(); // expect: false
 print color_editor.status_line_repaints; // expect: 1
+print color_editor.color_dialog_close_repaints; // expect: 1
 print color_editor.pack_sprite()[0]; // expect: 128
 
 color_editor.select_pattern(0);
@@ -210,8 +215,12 @@ color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
 color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
   "x": 608, "y": 221});
 print color_editor.color_dialog_pattern; // expect: 1
-color_editor.handle_event({"type": X11.KeyPress,
-  "keysym": X11.XK_Escape, "text": ""});
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 10, "y": 200});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 10, "y": 200});
+print color_editor.color_dialog_pattern; // expect: nil
+print color_editor.color_dialog_close_repaints; // expect: 3
 
 color_editor.render();
 color_editor.handle_event({"type": X11.ButtonPress, "button": 1,

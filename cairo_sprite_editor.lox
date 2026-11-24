@@ -68,6 +68,7 @@ class CairoSpriteEditor {
     this.incremental_cell_repaints = 0;
     this.expose_region_repaints = 0;
     this.color_dialog_repaints = 0;
+    this.color_dialog_close_repaints = 0;
     this.status_line_repaints = 0;
 
     this.compute_layout();
@@ -430,6 +431,16 @@ class CairoSpriteEditor {
     return {"x": 240, "y": 230, "width": 480, "height": 250};
   }
 
+  color_dialog_clear_rect() {
+    var geometry = this.color_dialog_geometry();
+    return {
+      "x": geometry["x"] - 4,
+      "y": geometry["y"] - 4,
+      "width": geometry["width"] + 8,
+      "height": geometry["height"] + 8
+    };
+  }
+
   color_swatch_rect(index) {
     var geometry = this.color_dialog_geometry();
     var column = index % 4;
@@ -476,12 +487,13 @@ class CairoSpriteEditor {
 
   cancel_color_dialog() {
     if (this.color_dialog_pattern == nil) return false;
-    var geometry = this.color_dialog_geometry();
+    var clear = this.color_dialog_clear_rect();
     this.color_dialog_pattern = nil;
     this.last_pattern_click = nil;
     this.status = "Color selection cancelled";
-    this.repaint_region(geometry["x"], geometry["y"],
-        geometry["width"], geometry["height"]);
+    this.repaint_region(clear["x"], clear["y"],
+        clear["width"], clear["height"]);
+    this.color_dialog_close_repaints = this.color_dialog_close_repaints + 1;
     this.repaint_status_line();
     return true;
   }
@@ -490,13 +502,14 @@ class CairoSpriteEditor {
     var pattern = this.color_dialog_pattern;
     if (pattern == nil or index < 0 or index >= this.c64_palette.length()) return false;
 
-    var geometry = this.color_dialog_geometry();
+    var clear = this.color_dialog_clear_rect();
     this.color_dialog_pattern = nil;
     this.last_pattern_click = nil;
     this.apply_color(pattern, index);
     this.status = "Set pattern " + this.mc_labels[pattern] + " to C64 color " + index;
-    this.repaint_region(geometry["x"], geometry["y"],
-        geometry["width"], geometry["height"]);
+    this.repaint_region(clear["x"], clear["y"],
+        clear["width"], clear["height"]);
+    this.color_dialog_close_repaints = this.color_dialog_close_repaints + 1;
     this.repaint_status_line();
     return true;
   }
@@ -683,6 +696,7 @@ class CairoSpriteEditor {
       if (type == X11.ButtonRelease and event["button"] == 1) {
         var swatch = this.color_swatch_at(event["x"], event["y"]);
         if (swatch != nil) this.choose_color(swatch);
+        else this.cancel_color_dialog();
       }
       return;
     }
@@ -898,7 +912,7 @@ class CairoSpriteEditor {
     }
 
     canvas.textTop(x + 20, y + height - 12,
-        "Click a swatch, arrows move, Enter selects, Esc cancels",
+        "Click swatch, arrows move, Enter selects, outside or Esc cancels",
         [0.55, 0.60, 0.70], 11.0);
   }
 

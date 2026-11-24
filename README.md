@@ -90,9 +90,10 @@ clicks update just the affected sprite/preview cells, expose events redraw only
 the reported region, and dialog typing updates just the filename field.
 
 The color picker offers the 16 standard C64 colors for patterns `01`, `10`, and
-`11`. Click a swatch to apply it, or use the arrow keys and `Enter`. `Esc`
-cancels. Color choices only affect the editor preview: saved sprites contain bit
-patterns only, and the colors are defined by the program that displays them.
+`11`. Click a swatch to apply it, or use the arrow keys and `Enter`. Clicking
+outside the picker or pressing `Esc` closes it without applying a color. Color
+choices only affect the editor preview: saved sprites contain bit patterns only,
+and the colors are defined by the program that displays them.
 
 The original notcurses editor is unchanged and remains available through
 `slox se_main.lox`.
