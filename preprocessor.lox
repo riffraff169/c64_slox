@@ -1,0 +1,307 @@
+require("expr.lox");
+require("tokens.lox");
+
+class AssemblyPreprocessor {
+  const MAX_EXPAND_DEPTH = 16;
+
+  init(tokens, logger = nil, context = nil) {
+    this.logger = logger;
+    this.symbols = (context != nil and context["symbols"] != nil) ? context["symbols"] : {};
+    this.macros = (context != nil and context["macros"] != nil) ? context["macros"] : {};
+    this.evaluator = ExpressionEvaluator();
+    this.conditionals = [];
+    this.lines = this.groupLines(tokens);
+  }
+
+  context() {
+    return {
+      "symbols": this.symbols,
+      "macros": this.macros
+    };
+  }
+
+  process() {
+    var expandedLines = this.processLines(this.lines, 0);
+
+    if (this.conditionals.length() > 0) {
+      print "Error: Unclosed conditional directive at end of source.";
+      System.exit(1);
+    }
+
+    var output = [];
+    var lastLine = 1;
+
+    for (var i = 0; i < expandedLines.length(); i += 1) {
+      var line = expandedLines[i];
+      for (var j = 0; j < line.length(); j += 1) {
+        output.push(this.cloneToken(line[j]));
+        lastLine = line[j].line;
+      }
+      output.push(Token(TokenType.NEWLINE, "\n", nil, lastLine));
+    }
+
+    output.push(Token(TokenType.EOF_TOKEN, "", nil, lastLine));
+    return output;
+  }
+
+  groupLines(tokens) {
+    var lines = [];
+    var current = [];
+
+    for (var i = 0; i < tokens.length(); i += 1) {
+      var token = tokens[i];
+      if (token.type == TokenType.NEWLINE) {
+        lines.push(current);
+        current = [];
+      } else if (token.type != TokenType.EOF_TOKEN) {
+        current.push(token);
+      }
+    }
+
+    if (current.length() > 0) lines.push(current);
+    return lines;
+  }
+
+  processLines(lines, depth) {
+    var result = [];
+
+    for (var i = 0; i < lines.length(); i += 1) {
+      var line = lines[i];
+      if (line.length() == 0) continue;
+
+      var directive = this.directiveName(line[0]);
+
+      if (directive == ".IF" or directive == ".IFDEF" or directive == ".IFNDEF" or
+          directive == ".ELSE" or directive == ".ELSEIF" or directive == ".ENDIF") {
+        this.handleConditional(line, directive);
+        continue;
+      }
+
+      if (!this.isActive()) continue;
+
+      if (directive == ".MACRO") {
+        var definition = this.parseMacroDefinition(line);
+        i = this.collectMacroBody(lines, i, definition);
+        continue;
+      }
+
+      this.recordConstant(line);
+
+      var name = this.invocationName(line);
+      if (name != nil and this.macros.has(name)) {
+        result = result + this.expandMacro(line, this.macros[name], depth + 1);
+      } else {
+        result.push(line);
+      }
+    }
+
+    return result;
+  }
+
+  handleConditional(line, directive) {
+    if (directive == ".IF" or directive == ".IFDEF" or directive == ".IFNDEF") {
+      var parentActive = this.isActive();
+      var condition = parentActive ? this.evaluateCondition(line, directive) : false;
+      this.conditionals.push({
+        "parentActive": parentActive,
+        "active": parentActive and condition,
+        "seenTrue": condition
+      });
+      return;
+    }
+
+    if (this.conditionals.length() == 0) {
+      print "Error on line " + line[0].line + ": " + directive + " without matching .IF.";
+      System.exit(1);
+    }
+
+    var frame = this.conditionals[this.conditionals.length() - 1];
+
+    if (directive == ".ELSE") {
+      frame["active"] = frame["parentActive"] and !frame["seenTrue"];
+      frame["seenTrue"] = frame["seenTrue"] or frame["active"];
+    } else if (directive == ".ELSEIF") {
+      var condition2 = false;
+      if (frame["parentActive"] and !frame["seenTrue"]) {
+        condition2 = this.evaluateCondition(line, ".IF");
+      }
+      frame["active"] = frame["parentActive"] and !frame["seenTrue"] and condition2;
+      frame["seenTrue"] = frame["seenTrue"] or frame["active"];
+    } else if (directive == ".ENDIF") {
+      this.conditionals.pop();
+    }
+  }
+
+  evaluateCondition(line, kind) {
+    if (line.length() < 2) return false;
+
+    if (kind == ".IFDEF" or kind == ".IFNDEF") {
+      var name = line[1].lexeme;
+      var found = this.symbols.has(name);
+      return kind == ".IFDEF" ? found : !found;
+    }
+
+    var expression = this.tokensToString(line, 1);
+    return this.evaluator.evaluate(expression, this.symbols, 0x0801, false) != 0;
+  }
+
+  isActive() {
+    for (var i = 0; i < this.conditionals.length(); i += 1) {
+      if (!this.conditionals[i]["active"]) return false;
+    }
+    return true;
+  }
+
+  recordConstant(line) {
+    if (line.length() < 3) return;
+
+    var op = line[1].lexeme.to_upper();
+    if (op != "=" and op != "EQU" and op != ".EQU") return;
+
+    var name = line[0].lexeme;
+    if (name.length() > 0 and name[name.length() - 1] == ':') {
+      name = name.slice(0, name.length() - 1);
+    }
+
+    var expression = this.tokensToString(line, 2);
+    this.symbols[name] = this.evaluator.evaluate(expression, this.symbols, 0x0801, false);
+  }
+
+  parseMacroDefinition(line) {
+    if (line.length() < 2) {
+      print "Error on line " + line[0].line + ": .MACRO requires a name.";
+      System.exit(1);
+    }
+
+    var name = line[1].lexeme.to_upper();
+    var params = [];
+    var rawParams = this.tokensToString(line, 2);
+    if (rawParams != "") {
+      var parts = rawParams.split(",");
+      for (var i = 0; i < parts.length(); i += 1) {
+        var param = parts[i].trim().to_upper();
+        if (param != "") params.push(param);
+      }
+    }
+
+    if (this.logger) this.logger.debug("Defined macro " + name);
+    return { "name": name, "params": params, "lines": [] };
+  }
+
+  collectMacroBody(lines, startIdx, definition) {
+    var i = startIdx + 1;
+    for (; i < lines.length(); i += 1) {
+      if (this.directiveName(lines[i][0]) == ".ENDMACRO") {
+        break;
+      }
+      definition["lines"].push(lines[i]);
+    }
+
+    if (i >= lines.length()) {
+      print "Error: Missing .ENDMACRO for macro " + definition["name"] + ".";
+      System.exit(1);
+    }
+
+    this.macros[definition["name"]] = definition;
+    return i;
+  }
+
+  expandMacro(line, macro, depth) {
+    if (depth > this.MAX_EXPAND_DEPTH) {
+      print "Error on line " + line[0].line + ": Macro expansion too deep.";
+      System.exit(1);
+    }
+
+    var args = this.splitArgs(line, 1);
+    if (args.length() != macro["params"].length()) {
+      print "Error on line " + line[0].line + ": Macro " + macro["name"] +
+        " expects " + macro["params"].length() + " argument(s), got " + args.length() + ".";
+      System.exit(1);
+    }
+
+    var expanded = [];
+    for (var i = 0; i < macro["lines"].length(); i += 1) {
+      expanded.push(this.substitute(macro["lines"][i], macro["params"], args));
+    }
+    return this.processLines(expanded, depth);
+  }
+
+  substitute(line, params, args) {
+    var result = [];
+
+    for (var i = 0; i < line.length(); i += 1) {
+      var token = line[i];
+      var paramIdx = -1;
+
+      for (var p = 0; p < params.length(); p += 1) {
+        if (token.lexeme.to_upper() == params[p]) {
+          paramIdx = p;
+          break;
+        }
+      }
+
+      if (paramIdx >= 0) {
+        var arg = args[paramIdx];
+        for (var a = 0; a < arg.length(); a += 1) {
+          result.push(this.cloneToken(arg[a], token.line));
+        }
+      } else {
+        result.push(this.cloneToken(token));
+      }
+    }
+
+    return result;
+  }
+
+  splitArgs(line, startIdx) {
+    var args = [];
+    var current = [];
+    var depth = 0;
+
+    for (var i = startIdx; i < line.length(); i += 1) {
+      var token = line[i];
+      if (token.type == TokenType.LPAREN) depth = depth + 1;
+      if (token.type == TokenType.RPAREN and depth > 0) depth = depth - 1;
+
+      if (token.type == TokenType.COMMA and depth == 0) {
+        args.push(current);
+        current = [];
+      } else {
+        current.push(token);
+      }
+    }
+
+    if (current.length() > 0 or args.length() > 0) args.push(current);
+    return args;
+  }
+
+  invocationName(line) {
+    if (line.length() == 0) return nil;
+    var token = line[0];
+    var text = token.lexeme;
+
+    if (token.type == TokenType.DIRECTIVE and text.length() > 1 and text[0] == '.') {
+      text = text.slice(1);
+    }
+    return text.to_upper();
+  }
+
+  directiveName(token) {
+    if (token.type != TokenType.DIRECTIVE) return "";
+    return token.lexeme.to_upper();
+  }
+
+  tokensToString(line, startIdx) {
+    var str = "";
+    for (var i = startIdx; i < line.length(); i += 1) {
+      if (i > startIdx) str = str + " ";
+      var value = line[i].literal;
+      str = str + (value == nil ? line[i].lexeme : "" + value);
+    }
+    return str;
+  }
+
+  cloneToken(token, lineNumber = nil) {
+    return Token(token.type, token.lexeme, token.literal, lineNumber ?? token.line);
+  }
+}

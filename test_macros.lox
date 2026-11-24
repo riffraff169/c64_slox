@@ -1,0 +1,87 @@
+require("scanner.lox");
+require("c64_parser.lox");
+require("opcodes.lox");
+require("pass1.lox");
+require("pass2.lox");
+
+fun assemble(source) {
+  var tokens = AssemblyScanner(source).scanTokens();
+  var statements = AssemblyParser(tokens).parse();
+  var pass1Result = Pass1(statements, OPCODES).run();
+  var pass2Result = Pass2(
+      pass1Result["statements"],
+      pass1Result["symbolTable"],
+      OPCODES,
+      pass1Result["startAddress"]
+  ).run(source.split("\n"));
+
+  var bytes = pass2Result["bytes"];
+  var hexString = "";
+  for (var i = 0; i < bytes.length(); i += 1) {
+    if (i > 0) hexString = hexString + " ";
+    hexString = hexString + Math.hex(bytes[i], 2, false).to_upper();
+  }
+  return hexString;
+}
+
+var source = "* = $0801\n" +
+             "VALUE = 5\n" +
+             ".MACRO SETBORDER color\n" +
+             "  LDA #color\n" +
+             "  STA $D020\n" +
+             ".ENDMACRO\n" +
+             ".MACRO PAIR a, b\n" +
+             "  .byte a, b\n" +
+             ".ENDMACRO\n" +
+             "  SETBORDER VALUE\n" +
+             "  .PAIR $10, $20\n" +
+             "  RTS\n";
+print assemble(source); // expect: A9 05 8D 20 D0 10 20 60
+
+var nested = "* = $0801\n" +
+             ".MACRO INNER v\n" +
+             "  .byte v\n" +
+             ".ENDMACRO\n" +
+             ".MACRO OUTER v\n" +
+             "  INNER v\n" +
+             "  INNER v + 1\n" +
+             ".ENDMACRO\n" +
+             "  OUTER 7\n";
+print assemble(nested); // expect: 07 08
+
+var conditionalBody = "* = $0801\n" +
+                      ".MACRO EMIT flag\n" +
+                      "  .IF flag\n" +
+                      "    .byte $AA\n" +
+                      "  .ELSE\n" +
+                      "    .byte $BB\n" +
+                      "  .ENDIF\n" +
+                      ".ENDMACRO\n" +
+                      ".MACRO INNER\n" +
+                      "  .byte $FF\n" +
+                      ".ENDMACRO\n" +
+                      ".MACRO MAYBE flag\n" +
+                      "  .IF flag\n" +
+                      "    INNER\n" +
+                      "  .ENDIF\n" +
+                      ".ENDMACRO\n" +
+                      "  EMIT 1\n" +
+                      "  EMIT 0\n" +
+                      "  MAYBE 0\n" +
+                      "  MAYBE 1\n";
+print assemble(conditionalBody); // expect: AA BB FF
+
+var includePath = "/tmp/slox_c64_test_macro_include.a64";
+File.save(includePath,
+          ".IFDEF SHARED\n" +
+          "  .byte $42\n" +
+          ".ENDIF\n" +
+          "  INCLUDED_MACRO\n");
+
+var withInclude = "* = $0801\n" +
+                  "SHARED = 1\n" +
+                  ".MACRO INCLUDED_MACRO\n" +
+                  "  .byte $43\n" +
+                  ".ENDMACRO\n" +
+                  "  .INCLUDE \"" + includePath + "\"\n";
+print assemble(withInclude); // expect: 42 43

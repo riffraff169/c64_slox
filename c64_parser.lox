@@ -1,13 +1,16 @@
 require("mode.lox");
+require("preprocessor.lox");
 
 class AssemblyParser {
   const branchOpcodes = ["BNE", "BEQ", "BCC", "BCS", "BPL", "BMI", "BVC", "BVS"];
 
-  init(tokens, visitedFiles = nil, logger = nil) {
+  init(tokens, visitedFiles = nil, logger = nil, preprocessorContext = nil) {
     this.tokens = tokens;
     this.logger = logger;
     this.current = 0;
     this.visitedFiles = visitedFiles ?? [];
+    this.preprocessorContext = preprocessorContext;
+    this.preprocessor = nil;
   }
 
   isBranch(mnemonic) {
@@ -20,6 +23,10 @@ class AssemblyParser {
 
   parse() {
     var statements = [];
+
+    this.preprocessor = AssemblyPreprocessor(this.tokens, this.logger, this.preprocessorContext);
+    this.tokens = this.preprocessor.process();
+    this.current = 0;
 
     while (!this.isAtEnd()) {
       if (this.match(TokenType.NEWLINE)) {
@@ -376,7 +383,8 @@ class AssemblyParser {
 
     var scanner = AssemblyScanner(includeSource, this.logger);
     var tokens = scanner.scanTokens();
-    var subParser = AssemblyParser(tokens, this.visitedFiles + [path], this.logger);
+    var context = this.preprocessor == nil ? nil : this.preprocessor.context();
+    var subParser = AssemblyParser(tokens, this.visitedFiles + [path], this.logger, context);
 
     return subParser.parse();
   }
