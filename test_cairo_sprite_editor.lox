@@ -1,0 +1,67 @@
+require("cairo_sprite_editor.lox");
+
+var canvas = Canvas.offscreen(900, 700);
+var editor = CairoSpriteEditor(canvas);
+
+print editor.grid_width; // expect: 24
+print editor.grid_height; // expect: 21
+print editor.is_multicolor; // expect: false
+print editor.active_pattern; // expect: 0
+
+print editor.select_pattern(1); // expect: true
+editor.set_pixel(0, 0);
+editor.set_pixel(7, 0);
+editor.set_pixel(8, 0);
+print editor.get_pixel(0, 0); // expect: 1
+print editor.get_pixel(7, 0); // expect: 1
+print editor.get_pixel(8, 0); // expect: 1
+
+var mono_bytes = editor.pack_sprite();
+print mono_bytes.length(); // expect: 64
+print mono_bytes[0]; // expect: 129
+print mono_bytes[1]; // expect: 128
+print mono_bytes[63]; // expect: 0
+
+var sprite_path = "/tmp/opencode/test_cairo_sprite_editor.bin";
+print editor.save_sprite(sprite_path); // expect: true
+var loaded = CairoSpriteEditor(Canvas.offscreen(900, 700));
+print loaded.load_sprite(sprite_path); // expect: true
+print loaded.get_pixel(0, 0); // expect: 1
+print loaded.get_pixel(7, 0); // expect: 1
+print loaded.get_pixel(8, 0); // expect: 1
+
+editor.toggle_mode();
+print editor.is_multicolor; // expect: true
+print editor.select_pattern(2); // expect: true
+editor.set_pixel(1, 1);
+print editor.get_pixel(0, 1); // expect: 2
+print editor.get_pixel(1, 1); // expect: 2
+
+var mc_bytes = editor.pack_sprite();
+print mc_bytes.length(); // expect: 64
+print mc_bytes[3]; // expect: 128
+
+var mc_loaded = CairoSpriteEditor(Canvas.offscreen(900, 700));
+mc_loaded.toggle_mode();
+print mc_loaded.unpack_sprite(mc_bytes); // expect: true
+print mc_loaded.get_pixel(0, 1); // expect: 2
+print mc_loaded.get_pixel(1, 1); // expect: 2
+
+editor.toggle_mode();
+print editor.is_multicolor; // expect: false
+print editor.active_pattern; // expect: 1
+
+print editor.canvas_cell_at(24, 130); // expect: [0, 0]
+print editor.palette_index_at(608, 176); // expect: 0
+print editor.button_at(30, 80); // expect: Mode (M)
+
+editor.handle_event({"type": X11.KeyPress, "keysym": 0, "text": "m"});
+print editor.is_multicolor; // expect: true
+editor.handle_event({"type": X11.KeyPress, "keysym": 0, "text": "1"});
+print editor.active_pattern; // expect: 0
+
+editor.render();
+print canvas.isOffscreen(); // expect: true
+print canvas.savePng("/tmp/opencode/test_cairo_sprite_editor.png"); // expect: 0
+
+canvas.close();

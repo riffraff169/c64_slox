@@ -7,8 +7,10 @@ A small 6502 assembler and Commodore 64 tooling project written in slox.
 - slox 1.13 or newer
 - The slox runtime libraries `argparser.lox`, `color.lox`, `multiffi.lox`, and
   `notcurses.lox` on the slox include path
+- For the Cairo editor: the runtime libraries `canvas.lox`, `cairo.lox`, and
+  `x11.lox`, plus libcairo and X11 at runtime
 
-The assembler does not depend on `logger.lox`; the TUI components do.
+The assembler does not depend on `logger.lox`; the notcurses TUI components do.
 
 ## Assembler
 
@@ -51,6 +53,36 @@ Diagnostics are emitted from every pipeline stage, including the preprocessor,
 `.INCLUDE` files, symbol resolving, and output writers. The assembler exits
 with a non-zero status before writing output files when any error is reported,
 and prints a summary when errors or warnings were seen.
+
+## Sprite editors
+
+### Cairo/X11 editor
+
+```sh
+slox cse_main.lox
+slox cse_main.lox --sprite sprite.bin
+slox cse_main.lox --png editor.png --sprite sprite.bin
+```
+
+`cse_main.lox` opens a 960x720 Cairo canvas. `--sprite` loads an existing
+64-byte raw sprite binary at startup, and `--png` renders one offscreen frame
+without opening an X11 window. The editor panel provides mode switching,
+pattern selection, save/load dialogs, clear, and quit.
+
+Controls:
+
+- Click the canvas to paint; click a pattern row to select it
+- `M` switches between single-color and multicolor mode
+- `1`–`4` select a pattern (`3` and `4` are multicolor only)
+- `S` / `L` open the save/load filename dialog
+- `C` clears the sprite, `Q` or `Esc` quits
+
+Saved sprites use the C64 layout: three bytes per row for 21 rows plus one
+padding byte. Single-color mode packs eight 1-bit pixels per byte. Multicolor
+mode packs four 2-bit horizontal pixel pairs per byte.
+
+The original notcurses editor is unchanged and remains available through
+`slox se_main.lox`.
 
 ## Supported directives
 
@@ -142,9 +174,11 @@ A small `Makefile` wraps the common commands:
 
 ```sh
 make test                       # run the test suite
-make asm SRC=sprite1.a64        # assemble one source to its default .prg
-make asm SRC=sprite1.a64 OUT=/tmp/sprite1.prg
+make asm SRC=constants.a64      # assemble one source to its default .prg
+make asm SRC=constants.a64 OUT=/tmp/constants.prg
 make samples                    # assemble sample sources into build/
+make cairo-editor               # launch the Cairo/X11 sprite editor
+make cairo-editor-png           # render one editor frame to editor.png
 make clean                      # remove build/
 ```
 

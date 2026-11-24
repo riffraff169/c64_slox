@@ -13,6 +13,7 @@ TESTS=(
   test_macros.lox
   test_conditionals.lox
   test_diagnostics.lox
+  test_cairo_sprite_editor.lox
   test_writeprg.lox
   test_d64writer.lox
 )
