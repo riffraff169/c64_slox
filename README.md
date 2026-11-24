@@ -73,7 +73,7 @@ Controls:
 
 - Click the canvas to paint; click a pattern row to select it
 - `M` switches between single-color and multicolor mode
-- `1`–`4` select a pattern (`3` and `4` are multicolor only)
+- `1`-`4` select a pattern (`3` and `4` are multicolor only)
 - `S` / `L` open the save/load filename dialog
 - `C` clears the sprite, `Q` or `Esc` quits
 
@@ -91,15 +91,15 @@ The original notcurses editor is unchanged and remains available through
 
 ## Supported directives
 
-- `.BASIC` — BASIC SYS header before the machine-code payload
-- `.BYTE expr[, expr ...]` — emit byte values or expressions
-- `.WORD expr[, expr ...]` — emit 16-bit little-endian values
-- `.TEXT "text"` / `.STRING "text"` — emit raw string bytes
-- `.ALIGN boundary` — pad to the next boundary
-- `.FILL count[, byte]` — emit `count` copies of `byte` (default `$00`)
-- `.RES count[, byte]` — reserve bytes, equivalent to `.FILL`
-- `.INCBIN "file"[, offset[, length]]` / `.INCLUDEBIN ...` — include raw bytes
-- `.INCLUDE "file"` — assemble another source file at this point
+- `.BASIC` - BASIC SYS header before the machine-code payload
+- `.BYTE expr[, expr ...]` - emit byte values or expressions
+- `.WORD expr[, expr ...]` - emit 16-bit little-endian values
+- `.TEXT "text"` / `.STRING "text"` - emit raw string bytes
+- `.ALIGN boundary` - pad to the next boundary
+- `.FILL count[, byte]` - emit `count` copies of `byte` (default `$00`)
+- `.RES count[, byte]` - reserve bytes, equivalent to `.FILL`
+- `.INCBIN "file"[, offset[, length]]` / `.INCLUDEBIN ...` - include raw bytes
+- `.INCLUDE "file"` - assemble another source file at this point
 
 Constants can be declared with `NAME = expr`, `NAME EQU expr`, or
 `NAME .EQU expr`. The program origin is set with `* = $addr`.
