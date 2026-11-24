@@ -1,12 +1,22 @@
 require("expr.lox");
 
 class Pass1 {
-  init(statements, opcodes) {
+  init(statements, opcodes, diagnostics = nil) {
     this.statements = statements;
     this.opcodes = opcodes;
+    this.diagnostics = diagnostics;
     this.symbolTable = {};
     this.currentPC = 0x0801;
     this.hasOrigin = false;
+  }
+
+  report(line, message) {
+    if (this.diagnostics != nil) {
+      this.diagnostics.error(line, message);
+      return;
+    }
+
+    print "Error on line " + line + ": " + message;
   }
 
   run() {
@@ -17,7 +27,8 @@ class Pass1 {
 
       // 1. constant assigment (eg BORDER_COLOR = $d020)
       if (stmt.type == "CONSTANT") {
-        var val = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
+        var val = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
+          true, this.diagnostics, stmt.line);
         this.symbolTable[stmt.label] = val;
         stmt.pc = this.currentPC;
         stmt.size = 0;
@@ -27,10 +38,11 @@ class Pass1 {
       // 2. origin directive (* = $0801)
       if (stmt.type == "ORIGIN") {
         if (this.hasOrigin) {
-          print "Error on line " + stmt.line + ": Multiple origin (* =) directives are not supported in single PRG mode.";
+          this.report(stmt.line, "Multiple origin (* =) directives are not supported in single PRG mode.");
           return;
         }
-        var val = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
+        var val = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
+          true, this.diagnostics, stmt.line);
         this.currentPC = val;
         stmt.pc = val;
         stmt.size = 0;
@@ -41,7 +53,7 @@ class Pass1 {
       // 3. address labels
       if (stmt.label and stmt.label != "") {
         if (this.symbolTable.has(stmt.label)) {
-          print "Error on line " + stmt.line + ": Duplicate label '" + stmt.label + "'";
+          this.report(stmt.line, "Duplicate label '" + stmt.label + "'");
         } else {
           this.symbolTable[stmt.label] = this.currentPC;
         }
@@ -64,7 +76,8 @@ class Pass1 {
           stmt.size = 13;
           this.currentPC += 13;
         } else if (dirName == ".ALIGN") {
-          var boundary = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
+          var boundary = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
+            true, this.diagnostics, stmt.line);
           if (boundary <= 0) boundary = 1;
 
           var remainder = this.currentPC % boundary;
@@ -74,7 +87,8 @@ class Pass1 {
           stmt.size = padding;
           this.currentPC += padding;
         } else if (dirName == ".FILL" or dirName == ".RES") {
-          var count = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
+          var count = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
+            true, this.diagnostics, stmt.line);
 
           stmt.pc = this.currentPC;
           stmt.size = count;
@@ -219,19 +233,21 @@ class Pass1 {
       return stmt.operand.length();
     }
     if (name == ".ALIGN") {
-      var boundary = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
+      var boundary = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
+        true, this.diagnostics, stmt.line);
       if (boundary <= 0) boundary = 1;
       var remainder = this.currentPC % boundary;
       return (remainder == 0) ? 0 : (boundary - remainder);
     }
     if (name == ".FILL" or name == ".RES") {
-      return evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC);
+      return evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
+        true, this.diagnostics, stmt.line);
     }
 
     if (name == ".INCBIN" or name == ".INCLUDEBIN") {
       var fileContent = File.load(stmt.operand);
       if (fileContent == nil) {
-        print "Error on line " + stmt.line + ": Cannot open binary file '" + stmt.operand + "'";
+        this.report(stmt.line, "Cannot open binary file '" + stmt.operand + "'");
         return 0;
       }
 
@@ -239,12 +255,14 @@ class Pass1 {
       var offset = 0;
 
       if (stmt.offsetExpr and stmt.offsetExpr != "") {
-        offset = evaluator.evaluate(stmt.offsetExpr, this.symbolTable, this.currentPC);
+        offset = evaluator.evaluate(stmt.offsetExpr, this.symbolTable, this.currentPC,
+          true, this.diagnostics, stmt.line);
       }
 
       var count = fileLen - offset;
       if (stmt.lengthExpr and stmt.lengthExpr != "") {
-        count = evaluator.evaluate(stmt.lengthExpr, this.symbolTable, this.currentPC);
+        count = evaluator.evaluate(stmt.lengthExpr, this.symbolTable, this.currentPC,
+          true, this.diagnostics, stmt.line);
       }
 
       if (offset >= fileLen or count <= 0) {

@@ -1,12 +1,22 @@
 require("expr.lox");
 
 class Pass2 {
-  init(statements, symbolTable, opcodes, startAddress = 0x0801) {
+  init(statements, symbolTable, opcodes, startAddress = 0x0801, diagnostics = nil) {
     this.statements = statements;
     this.symbolTable = symbolTable;
     this.opcodes = opcodes;
     this.currentAddress = startAddress;
     this.bytes = [];
+    this.diagnostics = diagnostics;
+  }
+
+  report(line, message) {
+    if (this.diagnostics != nil) {
+      this.diagnostics.error(line, message);
+      return;
+    }
+
+    print "Error on line " + line + ": " + message;
   }
 
   run(sourceLines) {
@@ -65,7 +75,7 @@ class Pass2 {
 
     // 1. look up opcode byte
     if (!this.opcodes.has(mnemonic) or !this.opcodes[mnemonic].has(mode)) {
-      print "Error on line " + stmt.line + ": Invalid instruction or mode (" + mnemonic + " " + mode + ")";
+      this.report(stmt.line, "Invalid instruction or mode (" + mnemonic + " " + mode + ")");
       return;
     }
 
@@ -87,7 +97,7 @@ class Pass2 {
       var offset = val - (stmt.pc + 2);
 
       if (offset < -128 or offset > 127) {
-        print "Error on line " + stmt.line + ": Branch out of range (" + offset + " bytes)";
+        this.report(stmt.line, "Branch out of range (" + offset + " bytes)");
         return;
       }
 
@@ -175,7 +185,7 @@ class Pass2 {
     }
 
     var evaluator = ExpressionEvaluator();
-    return evaluator.evaluate(exprStr, this.symbolTable, pc);
+    return evaluator.evaluate(exprStr, this.symbolTable, pc, true, this.diagnostics, line);
   }
 
   resolveTerm(term, lineNum) {
@@ -197,7 +207,7 @@ class Pass2 {
       return this.symbolTable[term];
     }
 
-    print "Error: Undefined symbol " + term + "' on line " + lineNum;
+    this.report(lineNum, "Undefined symbol '" + term + "'");
     return nil;
   }
 

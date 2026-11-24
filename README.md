@@ -30,8 +30,27 @@ Options:
 Example:
 
 ```sh
-slox asm.lox -l -s sprite1.a64
+slox asm.lox -l -s constants.a64
 ```
+
+## Diagnostics
+
+Errors and warnings use a consistent file/line format with the source line and
+an optional caret:
+
+```text
+constants.a64:12: error: Duplicate label 'loop'
+  loop:
+  ^
+
+constants.a64:20: warning: Empty directive '.' encountered.
+  .
+```
+
+Diagnostics are emitted from every pipeline stage, including the preprocessor,
+`.INCLUDE` files, symbol resolving, and output writers. The assembler exits
+with a non-zero status before writing output files when any error is reported,
+and prints a summary when errors or warnings were seen.
 
 ## Supported directives
 
@@ -116,3 +135,19 @@ SLOX_BIN=/path/to/slox ./run_tests.sh
 
 The tests write temporary `.prg` and `.d64` files under `/tmp` and do not
 depend on generated files in this directory.
+
+## Build workflow
+
+A small `Makefile` wraps the common commands:
+
+```sh
+make test                       # run the test suite
+make asm SRC=sprite1.a64        # assemble one source to its default .prg
+make asm SRC=sprite1.a64 OUT=/tmp/sprite1.prg
+make samples                    # assemble sample sources into build/
+make clean                      # remove build/
+```
+
+Override the interpreter with `SLOX_BIN`, for example
+`SLOX_BIN=/path/to/slox make test`. The sample build directory can be changed
+with `BUILD_DIR`, and the sample source list with `SOURCES`.

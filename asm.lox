@@ -9,7 +9,13 @@ require("prg_writer.lox");
 require("sym_writer.lox");
 require("d64_writer.lox");
 require("listing.lox");
+require("diagnostics.lox");
 
+fun abortOnErrors(diagnostics) {
+  if (!diagnostics.hasErrors()) return;
+  diagnostics.printSummary();
+  System.exit(1);
+}
 
 // 1. Configure CLI Parser
 var parser = ArgParser("slox asm.lox", "Assembles 6502 assembly source into a Commodore 64 .PRG file.");
@@ -59,23 +65,28 @@ if (source == nil) {
 }
 
 var sourceLines = source.split("\n");
+var diagnostics = AssemblyDiagnostics(inputFile, sourceLines);
 
 if (verbose) print "--- [ Assembler Pipeline Start ] ---";
 if (verbose) print "Reading: " + inputFile;
 
 // 3. Scan & Parse
 
-var scanner = AssemblyScanner(source, logger);
+var scanner = AssemblyScanner(source, logger, diagnostics);
 var tokens = scanner.scanTokens();
-var parserObj = AssemblyParser(tokens, nil, logger);
+var parserObj = AssemblyParser(tokens, nil, logger, nil, diagnostics);
 var statements = parserObj.parse();
+
+abortOnErrors(diagnostics);
 
 if (verbose) print "Scanned " + tokens.length() + " tokens into " + statements.length() + " statements.";
 
 // 4. Pass 1: Symbol Table & Address Resolution
-var pass1 = Pass1(statements, OPCODES);
+var pass1 = Pass1(statements, OPCODES, diagnostics);
 var pass1Result = pass1.run();
 var symbolTable = pass1Result["symbolTable"];
+
+abortOnErrors(diagnostics);
 
 if (verbose) {
   print "\n--- Symbol Table ---";
@@ -89,8 +100,11 @@ if (verbose) {
 }
 
 // 5. Pass 2: Machine Code Generation
-var pass2 = Pass2(pass1Result["statements"], symbolTable, OPCODES, pass1Result["startAddress"] ?? 2049);
+var pass2 = Pass2(pass1Result["statements"], symbolTable, OPCODES,
+    pass1Result["startAddress"] ?? 2049, diagnostics);
 var pass2Result = pass2.run(sourceLines);
+
+abortOnErrors(diagnostics);
 
 var assembledBytes = pass2Result["bytes"];
 var listingEntries = pass2Result["listingEntries"];
@@ -104,8 +118,8 @@ if (writer.save(assembledBytes, startAddress)) {
   print "Input:  " + inputFile;
   print "Output: " + outputFile + " (" + (assembledBytes.length() + 2) + " total bytes, start: $" + Math.hex(startAddress, 4, false) + ")";
 } else {
-  print "Error: Failed to write output file '" + outputFile + "'.";
-  System.exit(1);
+  diagnostics.error(nil, "Failed to write output file '" + outputFile + "'.");
+  abortOnErrors(diagnostics);
 }
 
 if (!!parsed.get("sym")) {
@@ -115,7 +129,7 @@ if (!!parsed.get("sym")) {
   if (symWriter.save(symbolTable)) {
     print "Symbol map written: " + symFile;
   } else {
-    print "Error: Failed to write symbol map '" + symFile + "'";
+    diagnostics.error(nil, "Failed to write symbol map '" + symFile + "'");
   }
 }
 
@@ -129,7 +143,7 @@ if (!!parsed.get("d64")) {
   if (d64Writer.save(d64File)) {
     print "D64 Disk Image written: " + d64File;
   } else {
-    print "Error: Failed to write D64 disk image '" + d64File + "'";
+    diagnostics.error(nil, "Failed to write D64 disk image '" + d64File + "'");
   }
 }
 
@@ -140,6 +154,9 @@ if (!!parsed.get("lst")) {
   if (lstWriter.save(listingEntries, symbolTable)) {
     print "Listing file written: " + lstFile;
   } else {
-    print "Error: failed to write listing file '" + lstFile + "'";
+    diagnostics.error(nil, "Failed to write listing file '" + lstFile + "'");
   }
 }
+
+abortOnErrors(diagnostics);
+diagnostics.printSummary();
