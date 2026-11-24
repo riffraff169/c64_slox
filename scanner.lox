@@ -98,9 +98,9 @@ class AssemblyScanner {
     if (c == '*') return this.addToken(TokenType.STAR, nil);
     if (c == '+') return this.addToken(TokenType.PLUS, "+");
     if (c == '-') return this.addToken(TokenType.MINUS, "-");
-    if (c == '<') return this.addToken(TokenType.LESS, "-");
-    if (c == '>') return this.addToken(TokenType.GREATER, "-");
-    if (c == '"') return;
+    if (c == '<') return this.addToken(TokenType.LESS, nil);
+    if (c == '>') return this.addToken(TokenType.GREATER, nil);
+    if (c == '"' or c == 39) return this.string(c);
 
     // directives (.byte, .word, .org)
     if (c == '.') {
@@ -136,6 +136,56 @@ class AssemblyScanner {
   }
 
   // helpers & matchers
+
+  string(quote) {
+    while (!this.isAtEnd() and this.peek() != quote) {
+      // Skip the character after a backslash so escaped quotes do not end the token.
+      if (this.peek() == '\\' and this.current + 1 < this.len) {
+        this.advance();
+      }
+      if (this.peek() == '\n') {
+        this.logError("Line " + this.line + ": Unterminated string.");
+        return;
+      }
+      this.advance();
+    }
+
+    if (this.isAtEnd()) {
+      this.logError("Line " + this.line + ": Unterminated string.");
+      return;
+    }
+
+    this.advance(); // closing quote
+    var text = this.source.slice(this.start + 1, this.current - 1);
+    this.addToken(TokenType.STRING, this.decodeString(text));
+  }
+
+  decodeString(text) {
+    var result = "";
+    var i = 0;
+    while (i < text.length()) {
+      var c = text[i];
+      if (c == '\\' and i + 1 < text.length()) {
+        var escaped = text[i + 1];
+        if (escaped == 'n') {
+          result = result + "\n";
+        } else if (escaped == 'r') {
+          result = result + "\r";
+        } else if (escaped == 't') {
+          result = result + "\t";
+        } else if (escaped == '0') {
+          result = result + chr(0);
+        } else {
+          result = result + chr(escaped);
+        }
+        i = i + 2;
+      } else {
+        result = result + chr(c);
+        i = i + 1;
+      }
+    }
+    return result;
+  }
 
   directive() {
     while (isAlphaNumeric(this.peek())) {
@@ -190,8 +240,8 @@ class AssemblyScanner {
     while (isDigit(this.peek()))
       this.advance();
 
-    var str = this.source.slice(this.start + 1, this.current);
-    var val = Number(str);
+    var str = this.source.slice(this.start, this.current);
+    var val = Integer(str);
     this.addToken(TokenType.NUMBER, val);
   }
 

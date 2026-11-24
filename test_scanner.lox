@@ -1,19 +1,18 @@
 require("scanner.lox");
 
-// Load external source file
-var source = File.load("sample.a64");
+var source = "* = $0801\n" +
+             "start:\n" +
+             "  LDA #$00\n" +
+             "  .text \"HI\"\n";
 
-// Run lexer
-var scanner = AssemblyScanner(source);
-var tokens = scanner.scanTokens();
+var tokens = AssemblyScanner(source).scanTokens();
+var out = "";
 
-// Dump token stream
-print "=== TOKEN STREAM ===";
-for (var i = 0; i < tokens.length(); i = i + 1) {
-  var t = tokens[i];
-  if (t.type != TokenType.NEWLINE) {
-    print t;
-  } else {
-    print "--- EOL ---";
-  }
+for (var i = 0; i < tokens.length(); i += 1) {
+  var token = tokens[i];
+  if (token.type == TokenType.NEWLINE or token.type == TokenType.EOF_TOKEN) continue;
+  if (out.length() > 0) out = out + " ";
+  out = out + token.type + ":" + token.lexeme;
 }
+
+print out; // expect: STAR:* EQUAL:= NUMBER:$0801 IDENTIFIER:start COLON:: IDENTIFIER:LDA HASH:# NUMBER:$00 DIRECTIVE:.text STRING:"HI"

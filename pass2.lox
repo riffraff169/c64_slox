@@ -121,33 +121,32 @@ class Pass2 {
       if (typeof(stmt.operand) == "Array") {
         for (var i = 0; i < stmt.operand.length(); i += 1) {
           var val = this.resolveOperand(stmt.operand[i], currentPC, stmt.line);
-          if (val) this.emitByte(val);
+          if (val != nil) this.emitByte(val);
         }
       } else {
         var val = this.resolveOperand(stmt.operand, currentPC, stmt.line);
-        if (val) this.emitByte(val);
+        if (val != nil) this.emitByte(val);
       }
     } else if (name == ".WORD") {
       if (typeof(stmt.operand) == "Array") {
         for (var i = 0; i < stmt.operand.length(); i += 1) {
           var val = this.resolveOperand(stmt.operand[i], currentPC, stmt.line);
-          if (val) this.emitWord(val);
+          if (val != nil) this.emitWord(val);
         }
       } else {
         var val = this.resolveOperand(stmt.operand, currentPC, stmt.line);
-        if (val) this.emitWord(val);
+        if (val != nil) this.emitWord(val);
       }
-    } else if (stmt.name.to_upper() == ".TEXT" or stmt.name.to_upper() == ".STRING") {
+    } else if (name == ".TEXT" or name == ".STRING") {
       var str = stmt.operand;
       for (var i = 0; i < str.length(); i += 1) {
-        // convert char string to byte index
         this.emitByte(str[i]);
       }
-    } else if (stmt.name.to_upper() == ".ALIGN") {
+    } else if (name == ".ALIGN") {
       for (var i = 0; i < stmt.size; i += 1) {
         this.emitByte(0x00);
       }
-    } else if (stmt.name.to_upper() == ".FILL") {
+    } else if (name == ".FILL" or name == ".RES") {
       var fillVal = 0x00;
       if (stmt.fillValExpr and stmt.fillValExpr != "") {
         fillVal = this.resolveOperand(stmt.fillValExpr, currentPC, stmt.line) ?? 0x00;
@@ -176,30 +175,7 @@ class Pass2 {
     }
 
     var evaluator = ExpressionEvaluator();
-    return evaluator.evaluate(op, this.symbolTable, pc);
-
-    // not reached
-    if (isnumber(op)) {
-      return op;
-    }
-
-    var str = op;
-
-    // strip immediate '#' prefix if present
-    if (typeof(str) == "String" and str.length() > 0 and str[0] == '#') {
-      str = str.slice(1);
-    }
-
-    print "str: " + str;
-
-    //for (var i = 0; i < str.lengt(); i += 1) {
-    // look up symbol in pass 1 table
-    if (this.symbolTable.has(op)) {
-      return this.symbolTable[op];
-    }
-
-    print "Error on line " + line + ": Undefined symbol '" + op + "'";
-    return nil;
+    return evaluator.evaluate(exprStr, this.symbolTable, pc);
   }
 
   resolveTerm(term, lineNum) {

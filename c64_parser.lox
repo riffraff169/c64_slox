@@ -182,12 +182,17 @@ class AssemblyParser {
     return Statement(stmtType, label, name, mode, targetExpr, lineNum);
   }
 
+  tokenText(token) {
+    if (token.literal != nil) return "" + token.literal;
+    return token.lexeme;
+  }
+
   tokensToString(tokens, start, end) {
     var str = "";
     for (var i = start; i < end; i += 1) {
       if (i > start)
         str = str + " ";
-      str = str + tokens[i].lexeme;
+      str = str + this.tokenText(tokens[i]);
     }
     return str;
   }
@@ -195,9 +200,41 @@ class AssemblyParser {
   parseDirectiveArgs(tokens, startIdx) {
     var raw = "";
     for (var i = startIdx; i < tokens.length(); i += 1) {
-      raw = raw + tokens[i].lexeme;
+      raw = raw + this.tokenText(tokens[i]);
     }
     return raw.trim();
+  }
+
+  parseFilename(tokens, startIdx) {
+    var name = "";
+    for (var i = startIdx; i < tokens.length(); i += 1) {
+      name = name + this.tokenText(tokens[i]);
+    }
+    return name.trim();
+  }
+
+  parseExpressionList(tokens, startIdx) {
+    var values = [];
+    var current = "";
+    var depth = 0;
+
+    for (var i = startIdx; i < tokens.length(); i += 1) {
+      var token = tokens[i];
+
+      if (token.type == TokenType.LPAREN) depth = depth + 1;
+      if (token.type == TokenType.RPAREN and depth > 0) depth = depth - 1;
+
+      if (token.type == TokenType.COMMA and depth == 0) {
+        values.push(current.trim());
+        current = "";
+      } else {
+        current = current + this.tokenText(token);
+      }
+    }
+
+    var last = current.trim();
+    if (last != "" or values.length() > 0) values.push(last);
+    return values;
   }
 
   parseDirective(lineTokens, startIdx, label, lineNum) {
@@ -213,29 +250,24 @@ class AssemblyParser {
     }
     
     if (dirName == ".BYTE") {
-      var byteValues = [];
-      while (idx < lineTokens.length()) {
-        var t = lineTokens[idx];
-        if (isnumber(t.literal)) {
-          byteValues.push(t.literal ?? t.lexeme);
-        }
-        idx += 1;
-      }
+      var byteValues = this.parseExpressionList(lineTokens, idx);
       this.logger?.debug("Parsed Directive: .byte");
       return Statement("DIRECTIVE", label, dirName, nil, byteValues, lineNum);
     }
 
     if (dirName == ".WORD") {
-      var wordValues = [];
-      while (idx < lineTokens.length()) {
-        var t = lineTokens[idx];
-        if (isnumber(t.literal)) {
-          wordValues.push(t.literal ?? t.lexeme);
-        }
-        idx += 1;
-      }
+      var wordValues = this.parseExpressionList(lineTokens, idx);
       this.logger?.debug("Parsed Directive: .word");
       return Statement("DIRECTIVE", label, dirName, nil, wordValues, lineNum);
+    }
+
+    if (dirName == ".TEXT" or dirName == ".STRING") {
+      var text = "";
+      for (var i = idx; i < lineTokens.length(); i += 1) {
+        text = text + this.tokenText(lineTokens[i]);
+      }
+      this.logger?.debug("Parsed Directive: " + dirName);
+      return Statement("DIRECTIVE", label, dirName, nil, text, lineNum);
     }
 
     if (dirName == ".INCLUDE") {
@@ -244,14 +276,9 @@ class AssemblyParser {
         System.exit(1);
       }
 
-      var pathToken = lineTokens[idx];
-      var path = pathToken.lexeme;
-      for (var i = idx + 1; i < lineTokens.length(); i += 1) {
-        path = path + lineTokens[i].lexeme;
-      }
-
-      if (path[0] == '"') {
-        path = path.slice(1, -1);
+      var path = this.parseFilename(lineTokens, idx);
+      if (path.length() >= 2 and path[0] == '"' and path[path.length() - 1] == '"') {
+        path = path.slice(1, path.length() - 1);
       }
       this.logger?.debug("Parsed Directive: .include " + path);
       return this.processInclude(path, lineNum);
@@ -263,14 +290,14 @@ class AssemblyParser {
       return Statement("DIRECTIVE", label, dirName, nil, argStr, lineNum);
     }
 
-    if (dirName == ".FILL") {
-      // .fill 64, $ff or .fill 64 (defaults fill byte to $00)
+    if (dirName == ".FILL" or dirName == ".RES") {
+      // .fill 64, $ff / .res 64 (both default the fill byte to $00)
       var argStr = this.parseDirectiveArgs(lineTokens, idx);
       var countExpr = argStr;
       var fillExpr = "$00";
 
       var commaIdx = argStr.find(",");
-      if (commaIdx) {
+      if (commaIdx >= 0) {
         countExpr = argStr.slice(0, commaIdx).trim();
         fillExpr = argStr.slice(commaIdx + 1).trim();
       }
@@ -287,11 +314,11 @@ class AssemblyParser {
       var lengthExpr = nil;
 
       var comma1 = argStr.find(",");
-      if (comma1) {
+      if (comma1 >= 0) {
         filename = argStr.slice(0, comma1).trim();
         var rest = argStr.slice(comma1 + 1).trim();
         var comma2 = rest.find(",");
-        if (comma2) {
+        if (comma2 >= 0) {
           offsetExpr = rest.slice(0, comma2).trim();
           lengthExpr = rest.slice(comma2 + 1).trim();
         } else {
@@ -299,8 +326,8 @@ class AssemblyParser {
         }
       }
 
-      if (filename.length() >= 2 and filename[0] == "\"" and filename[filename.length() - 1] == "\"") {
-        filename = filename.slice(1, filename.length() -1);
+      if (filename.length() >= 2 and filename[0] == '"' and filename[filename.length() - 1] == '"') {
+        filename = filename.slice(1, filename.length() - 1);
       }
 
       var stmt = Statement("DIRECTIVE", label, dirName, nil, filename, lineNum);
@@ -347,11 +374,9 @@ class AssemblyParser {
       System.exit(1);
     }
 
-    this.visitedFiles.push(path);
-
-    var scanner = AssemblyScanner(includeSource);
+    var scanner = AssemblyScanner(includeSource, this.logger);
     var tokens = scanner.scanTokens();
-    var subParser = AssemblyParser(tokens, this.visitedFiles);
+    var subParser = AssemblyParser(tokens, this.visitedFiles + [path], this.logger);
 
     return subParser.parse();
   }

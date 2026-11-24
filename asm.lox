@@ -1,6 +1,5 @@
 #!/usr/bin/env slox
 require("argparser.lox");
-require("logger.lox");
 require("scanner.lox");
 require("c64_parser.lox");
 require("opcodes.lox");
@@ -34,10 +33,8 @@ if (parsed == nil or parsed.args.length() < 1) {
 var inputFile = parsed.args[0];
 var verbose = !!parsed.get("verbose");
 var outputFile = parsed.get("output");
-var debug = !!parsed.get("debug");
-var debuglevel = debug ? 1 : 3;
 
-var logger = Logger({"app_name": "ASM64", "level": debuglevel });
+var logger = nil;
 
 // Auto-derive output filename if -o / --output wasn't specified
 
@@ -92,7 +89,7 @@ if (verbose) {
 }
 
 // 5. Pass 2: Machine Code Generation
-var pass2 = Pass2(pass1Result["statements"], symbolTable, OPCODES);
+var pass2 = Pass2(pass1Result["statements"], symbolTable, OPCODES, pass1Result["startAddress"] ?? 2049);
 var pass2Result = pass2.run(sourceLines);
 
 var assembledBytes = pass2Result["bytes"];
@@ -118,7 +115,7 @@ if (!!parsed.get("sym")) {
   if (symWriter.save(symbolTable)) {
     print "Symbol map written: " + symFile;
   } else {
-    print "Error: Failed to write symbol map '" + symFilel + "'";
+    print "Error: Failed to write symbol map '" + symFile + "'";
   }
 }
 

@@ -1,0 +1,17 @@
+require("expr.lox");
+
+var symbols = {
+  "LABEL": 0x1234,
+  "ZERO": 0
+};
+var evaluator = ExpressionEvaluator();
+var pc = 0x9000;
+
+print evaluator.evaluate("LABEL", symbols, pc); // expect: 4660
+print evaluator.evaluate("LABEL + 1", symbols, pc); // expect: 4661
+print evaluator.evaluate("LABEL - 1", symbols, pc); // expect: 4659
+print evaluator.evaluate("10 - 2 - 3", symbols, pc); // expect: 5
+print evaluator.evaluate("<LABEL", symbols, pc); // expect: 52
+print evaluator.evaluate(">LABEL", symbols, pc); // expect: 18
+print evaluator.evaluate("ZERO", symbols, pc); // expect: 0
+print evaluator.evaluate("*", symbols, pc); // expect: 36864
