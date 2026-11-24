@@ -2,7 +2,7 @@ SLOX_BIN ?= slox
 SRC ?=
 OUT ?=
 BUILD_DIR ?= build
-SOURCES ?= sample.a64 sprite1.a64
+SOURCES ?= sample.a64 constants.a64
 
 .PHONY: all test asm samples clean help
 

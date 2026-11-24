@@ -30,7 +30,7 @@ Options:
 Example:
 
 ```sh
-slox asm.lox -l -s sprite1.a64
+slox asm.lox -l -s constants.a64
 ```
 
 ## Diagnostics
@@ -39,11 +39,11 @@ Errors and warnings use a consistent file/line format with the source line and
 an optional caret:
 
 ```text
-sprite1.a64:12: error: Duplicate label 'loop'
+constants.a64:12: error: Duplicate label 'loop'
   loop:
   ^
 
-sprite1.a64:20: warning: Empty directive '.' encountered.
+constants.a64:20: warning: Empty directive '.' encountered.
   .
 ```
 
