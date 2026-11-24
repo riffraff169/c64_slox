@@ -96,6 +96,10 @@ Constants declared with `=`, `EQU`, or `.EQU` are visible to `.IFDEF` and
 `.ELSEIF` expressions evaluate to `0`; ordinary assembly expressions still
 report undefined symbols as errors.
 
+Directive names, macro names, macro parameters, and opcodes are
+case-insensitive. Constants, labels, and other symbolic names are
+case-sensitive and must match exactly.
+
 ## Tests
 
 From this directory:
