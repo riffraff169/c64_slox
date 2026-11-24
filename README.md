@@ -79,7 +79,11 @@ Controls:
 
 Saved sprites use the C64 layout: three bytes per row for 21 rows plus one
 padding byte. Single-color mode packs eight 1-bit pixels per byte. Multicolor
-mode packs four 2-bit horizontal pixel pairs per byte.
+mode packs four 2-bit horizontal pixel pairs per byte. Switching modes
+converts existing pixels: adjacent single-color bits become multicolor
+patterns (on/blank becomes `10: Primary`), and switching back restores the
+individual bits. The window redraws only when editor state changes, and dialog
+typing updates just the filename field.
 
 The original notcurses editor is unchanged and remains available through
 `slox se_main.lox`.

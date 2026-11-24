@@ -35,6 +35,7 @@ class CairoSpriteEditor {
 
     this.dialog_mode = nil;
     this.dialog_text = "";
+    this.dialog_text_draws = 0;
     this.pressed_button = nil;
     this.needs_paint = true;
 
@@ -58,7 +59,7 @@ class CairoSpriteEditor {
     if (this.panel_width < 180) this.panel_width = 180;
 
     this.palette_y = this.canvas_y;
-    this.preview_y = this.palette_y + 190;
+    this.preview_y = this.palette_y + 230;
     var preview_width = (this.panel_width - 32) / this.grid_width;
     this.preview_cell = preview_width < 12 ? preview_width : 12;
   }
@@ -109,8 +110,32 @@ class CairoSpriteEditor {
     return true;
   }
 
+  convert_pixels_for_mode(multicolor) {
+    if (multicolor == this.is_multicolor) return;
+
+    for (var y = 0; y < this.grid_height; y += 1) {
+      for (var pair = 0; pair < this.grid_width / 2; pair += 1) {
+        var x = pair * 2;
+        if (multicolor) {
+          var left = this.pixels[y][x] != 0 ? 1 : 0;
+          var right = this.pixels[y][x + 1] != 0 ? 1 : 0;
+          var pattern = (left << 1) | right;
+          this.pixels[y][x] = pattern;
+          this.pixels[y][x + 1] = pattern;
+        } else {
+          var value = this.pixels[y][x] & 3;
+          this.pixels[y][x] = (value & 2) != 0 ? 1 : 0;
+          this.pixels[y][x + 1] = (value & 1) != 0 ? 1 : 0;
+        }
+      }
+    }
+    this.request_repaint();
+  }
+
   toggle_mode() {
-    this.is_multicolor = !this.is_multicolor;
+    var multicolor = !this.is_multicolor;
+    this.convert_pixels_for_mode(multicolor);
+    this.is_multicolor = multicolor;
     if (!this.is_multicolor and this.active_pattern > 1) {
       this.active_pattern = 1;
     }
@@ -257,6 +282,37 @@ class CairoSpriteEditor {
     return nil;
   }
 
+  dialog_geometry() {
+    return {"x": 260, "y": 250, "width": 440, "height": 180};
+  }
+
+  dialog_text_rect() {
+    var geometry = this.dialog_geometry();
+    return {
+      "x": geometry["x"] + 20,
+      "y": geometry["y"] + 78,
+      "width": geometry["width"] - 40,
+      "height": 40
+    };
+  }
+
+  paint_dialog_text(canvas) {
+    var rect = this.dialog_text_rect();
+    canvas.fillRect(rect["x"], rect["y"], rect["width"], rect["height"],
+        [0.04, 0.05, 0.07]);
+    canvas.strokeRect(rect["x"], rect["y"], rect["width"], rect["height"],
+        [0.10, 0.78, 1.0], 2.0);
+    canvas.textTop(rect["x"] + 12, rect["y"] + 13, this.dialog_text,
+        [1.0, 1.0, 1.0], 14.0);
+  }
+
+  redraw_dialog_text() {
+    this.paint_dialog_text(this.canvas);
+    this.canvas.present();
+    this.dialog_text_draws = this.dialog_text_draws + 1;
+    this.mark_clean();
+  }
+
   open_dialog(mode) {
     this.dialog_mode = mode;
     this.dialog_text = "";
@@ -271,7 +327,6 @@ class CairoSpriteEditor {
   }
 
   handle_dialog_key(event) {
-    this.request_repaint();
     var keysym = event["keysym"];
     if (keysym == X11.XK_Return or keysym == X11.XK_KP_Enter) {
       var filepath = this.dialog_text;
@@ -291,6 +346,7 @@ class CairoSpriteEditor {
     if (keysym == X11.XK_BackSpace) {
       if (this.dialog_text.length() > 0) {
         this.dialog_text = this.dialog_text.slice(0, this.dialog_text.length() - 1);
+        this.redraw_dialog_text();
       }
       return;
     }
@@ -298,6 +354,7 @@ class CairoSpriteEditor {
     var text = event["text"];
     if (text == nil or text.length() != 1) return;
     this.dialog_text = this.dialog_text + text;
+    this.redraw_dialog_text();
   }
 
   activate_button(label) {
@@ -315,13 +372,13 @@ class CairoSpriteEditor {
   }
 
   handle_key(event) {
-    this.request_repaint();
     var keysym = event["keysym"];
     if (this.dialog_mode != nil) {
       this.handle_dialog_key(event);
       return;
     }
 
+    this.request_repaint();
     if (keysym == X11.XK_Escape) {
       this.canvas.running = false;
       return;
@@ -513,10 +570,11 @@ class CairoSpriteEditor {
   }
 
   draw_dialog(canvas) {
-    var x = 260;
-    var y = 250;
-    var width = 440;
-    var height = 180;
+    var geometry = this.dialog_geometry();
+    var x = geometry["x"];
+    var y = geometry["y"];
+    var width = geometry["width"];
+    var height = geometry["height"];
     var verb = this.dialog_mode == "save" ? "Save" : "Load";
 
     canvas.fillRect(x, y, width, height, [0.08, 0.09, 0.13]);
@@ -524,9 +582,7 @@ class CairoSpriteEditor {
     canvas.textTop(x + 20, y + 20, verb + " Sprite", [0.92, 0.95, 1.0], 18.0);
     canvas.textTop(x + 20, y + 54, "Filename:", [0.72, 0.78, 0.88], 12.0);
 
-    canvas.fillRect(x + 20, y + 78, width - 40, 40, [0.04, 0.05, 0.07]);
-    canvas.strokeRect(x + 20, y + 78, width - 40, 40, [0.10, 0.78, 1.0], 2.0);
-    canvas.textTop(x + 32, y + 91, this.dialog_text, [1.0, 1.0, 1.0], 14.0);
+    this.paint_dialog_text(canvas);
     canvas.textTop(x + 20, y + 140, "Enter: confirm    Esc: cancel", [0.55, 0.60, 0.70], 11.0);
   }
 

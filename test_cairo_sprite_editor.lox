@@ -6,6 +6,7 @@ var editor = CairoSpriteEditor(canvas);
 print editor.grid_width; // expect: 24
 print editor.grid_height; // expect: 21
 print editor.needs_repaint(); // expect: true
+print editor.preview_y; // expect: 360
 print editor.is_multicolor; // expect: false
 print editor.active_pattern; // expect: 0
 
@@ -33,6 +34,11 @@ print loaded.get_pixel(8, 0); // expect: 1
 
 editor.toggle_mode();
 print editor.is_multicolor; // expect: true
+print editor.get_pixel(0, 0); // expect: 2
+print editor.get_pixel(1, 0); // expect: 2
+print editor.get_pixel(6, 0); // expect: 1
+print editor.get_pixel(7, 0); // expect: 1
+print editor.get_pixel(8, 0); // expect: 2
 print editor.select_pattern(2); // expect: true
 editor.set_pixel(1, 1);
 print editor.get_pixel(0, 1); // expect: 2
@@ -51,6 +57,13 @@ print mc_loaded.get_pixel(1, 1); // expect: 2
 editor.toggle_mode();
 print editor.is_multicolor; // expect: false
 print editor.active_pattern; // expect: 1
+print editor.get_pixel(0, 0); // expect: 1
+print editor.get_pixel(1, 0); // expect: 0
+print editor.get_pixel(6, 0); // expect: 0
+print editor.get_pixel(7, 0); // expect: 1
+print editor.get_pixel(8, 0); // expect: 1
+print editor.get_pixel(0, 1); // expect: 1
+print editor.get_pixel(1, 1); // expect: 0
 
 print editor.canvas_cell_at(24, 130); // expect: [0, 0]
 print editor.palette_index_at(608, 176); // expect: 0
@@ -67,6 +80,23 @@ editor.handle_event({"type": X11.Expose});
 print editor.needs_repaint(); // expect: true
 editor.render();
 print editor.needs_repaint(); // expect: false
+
+editor.open_dialog("save");
+print editor.needs_repaint(); // expect: true
+editor.render();
+print editor.needs_repaint(); // expect: false
+editor.handle_event({"type": X11.KeyPress, "keysym": 0, "text": "a"});
+print "[" + editor.dialog_text + "]"; // expect: [a]
+print editor.needs_repaint(); // expect: false
+print editor.dialog_text_draws; // expect: 1
+editor.handle_event({"type": X11.KeyPress, "keysym": X11.XK_BackSpace, "text": ""});
+print "[" + editor.dialog_text + "]"; // expect: []
+print editor.needs_repaint(); // expect: false
+print editor.dialog_text_draws; // expect: 2
+editor.handle_event({"type": X11.KeyPress, "keysym": X11.XK_Escape, "text": ""});
+print editor.needs_repaint(); // expect: true
+editor.render();
+
 print canvas.isOffscreen(); // expect: true
 print canvas.savePng("/tmp/opencode/test_cairo_sprite_editor.png"); // expect: 0
 
