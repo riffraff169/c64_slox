@@ -74,6 +74,9 @@ Controls:
 - Click the canvas to paint; click a pattern row to select it
 - `M` switches between single-color and multicolor mode
 - `1`-`4` select a pattern (`3` and `4` are multicolor only)
+- `P` or the Colors button opens the color picker for the active multicolor pattern
+- In multicolor mode, clicking an already selected pattern row or block a second
+  time opens its color picker; pattern `00` has no color picker
 - `S` / `L` open the save/load filename dialog
 - `C` clears the sprite, `Q` or `Esc` quits
 
@@ -85,6 +88,11 @@ patterns (on/blank becomes `10: Primary`), and switching back restores the
 individual bits. The window redraws only when editor state changes; canvas
 clicks update just the affected sprite/preview cells, expose events redraw only
 the reported region, and dialog typing updates just the filename field.
+
+The color picker offers the 16 standard C64 colors for patterns `01`, `10`, and
+`11`. Click a swatch to apply it, or use the arrow keys and `Enter`. `Esc`
+cancels. Color choices only affect the editor preview: saved sprites contain bit
+patterns only, and the colors are defined by the program that displays them.
 
 The original notcurses editor is unchanged and remains available through
 `slox se_main.lox`.
