@@ -4,13 +4,14 @@ require("preprocessor.lox");
 class AssemblyParser {
   const branchOpcodes = ["BNE", "BEQ", "BCC", "BCS", "BPL", "BMI", "BVC", "BVS"];
 
-  init(tokens, visitedFiles = nil, logger = nil, preprocessorContext = nil) {
+  init(tokens, visitedFiles = nil, logger = nil, preprocessorContext = nil, diagnostics = nil) {
     this.tokens = tokens;
     this.logger = logger;
     this.current = 0;
     this.visitedFiles = visitedFiles ?? [];
     this.preprocessorContext = preprocessorContext;
     this.preprocessor = nil;
+    this.diagnostics = diagnostics;
   }
 
   isBranch(mnemonic) {
@@ -24,7 +25,8 @@ class AssemblyParser {
   parse() {
     var statements = [];
 
-    this.preprocessor = AssemblyPreprocessor(this.tokens, this.logger, this.preprocessorContext);
+    this.preprocessor = AssemblyPreprocessor(this.tokens, this.logger,
+      this.preprocessorContext, this.diagnostics);
     this.tokens = this.preprocessor.process();
     this.current = 0;
 
@@ -279,8 +281,8 @@ class AssemblyParser {
 
     if (dirName == ".INCLUDE") {
       if (idx >= lineTokens.length()) {
-        print "Error: Missing filename for .include directive on line " + lineNum;
-        System.exit(1);
+        this.report(lineNum, "Missing filename for .include directive.");
+        return nil;
       }
 
       var path = this.parseFilename(lineTokens, idx);
@@ -367,24 +369,37 @@ class AssemblyParser {
     return { "expression": rawExpr, "register": reg };
   }
 
+  report(line, message) {
+    if (this.diagnostics != nil) {
+      this.diagnostics.error(line, message);
+      return;
+    }
+
+    print "Error on line " + line + ": " + message;
+    System.exit(1);
+  }
+
   processInclude(path, lineNum) {
     for (var i = 0; i < this.visitedFiles.length(); i += 1) {
       if (this.visitedFiles[i] == path) {
-        print "Error: Circular .include detected for '" + path + "' on line " + lineNum;
-        System.exit(1);
+        this.report(lineNum, "Circular .include detected for '" + path + "'.");
+        return [];
       }
     }
 
     var includeSource = File.load(path);
     if (includeSource == nil) {
-      print "Error: Could not read included file '" + path + "' on line " + lineNum;
-      System.exit(1);
+      this.report(lineNum, "Could not read included file '" + path + "'.");
+      return [];
     }
 
-    var scanner = AssemblyScanner(includeSource, this.logger);
+    var childDiagnostics = this.diagnostics == nil ? nil :
+      this.diagnostics.withSource(path, includeSource.split("\n"));
+    var scanner = AssemblyScanner(includeSource, this.logger, childDiagnostics);
     var tokens = scanner.scanTokens();
     var context = this.preprocessor == nil ? nil : this.preprocessor.context();
-    var subParser = AssemblyParser(tokens, this.visitedFiles + [path], this.logger, context);
+    var subParser = AssemblyParser(tokens, this.visitedFiles + [path], this.logger,
+      context, childDiagnostics);
 
     return subParser.parse();
   }

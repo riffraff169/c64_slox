@@ -1,0 +1,69 @@
+require("diagnostics.lox");
+require("scanner.lox");
+require("c64_parser.lox");
+require("opcodes.lox");
+require("pass1.lox");
+require("pass2.lox");
+
+var diag = AssemblyDiagnostics("sample.a64", ["LDA #$01", "STA $D020"]);
+
+diag.error(2, "Duplicate label 'loop'", 3);
+// expect: sample.a64:2: error: Duplicate label 'loop'
+// expect:   STA $D020
+// expect:     ^
+diag.warn(1, "Legacy directive");
+// expect: sample.a64:1: warning: Legacy directive
+// expect:   LDA #$01
+print diag.errorCount(); // expect: 1
+print diag.warningCount(); // expect: 1
+print diag.hasErrors(); // expect: true
+
+var child = diag.withSource("inc.a64", ["child line"]);
+child.error(1, "Bad include");
+// expect: inc.a64:1: error: Bad include
+// expect:   child line
+print diag.errorCount(); // expect: 2
+
+diag.printSummary();
+// expect: sample.a64: 2 error(s), 1 warning(s).
+
+var badSource = "* = $0801\n" +
+                "  LDA #$01 @\n";
+var scanDiag = AssemblyDiagnostics("scan.a64", badSource.split("\n"));
+AssemblyScanner(badSource, nil, scanDiag).scanTokens();
+// expect: scan.a64:2: error: Unexpected character '@'
+// expect:     LDA #$01 @
+print scanDiag.errorCount(); // expect: 1
+
+var macroSource = ".MACRO ONE a\n" +
+                  "  .byte a\n" +
+                  ".ENDMACRO\n" +
+                  "  ONE\n";
+var macroDiag = AssemblyDiagnostics("macro.a64", macroSource.split("\n"));
+var macroTokens = AssemblyScanner(macroSource, nil, macroDiag).scanTokens();
+AssemblyParser(macroTokens, nil, nil, nil, macroDiag).parse();
+// expect: macro.a64:4: error: Macro ONE expects 1 argument(s), got 0.
+// expect:     ONE
+print macroDiag.errorCount(); // expect: 1
+
+var source = "* = $0801\n" +
+             "label:\n" +
+             "  LDA #MISSING\n" +
+             "label:\n" +
+             "  RTS\n";
+var pipelineDiag = AssemblyDiagnostics("pipeline.a64", source.split("\n"));
+var tokens = AssemblyScanner(source, nil, pipelineDiag).scanTokens();
+var statements = AssemblyParser(tokens, nil, nil, nil, pipelineDiag).parse();
+var pass1Result = Pass1(statements, OPCODES, pipelineDiag).run();
+Pass2(
+    pass1Result["statements"],
+    pass1Result["symbolTable"],
+    OPCODES,
+    pass1Result["startAddress"],
+    pipelineDiag
+).run(source.split("\n"));
+// expect: pipeline.a64:4: error: Duplicate label 'label'
+// expect:   label:
+// expect: pipeline.a64:3: error: Undefined symbol or expression 'MISSING'
+// expect:     LDA #MISSING
+print pipelineDiag.errorCount(); // expect: 2

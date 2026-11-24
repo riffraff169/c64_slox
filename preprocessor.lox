@@ -4,8 +4,9 @@ require("tokens.lox");
 class AssemblyPreprocessor {
   const MAX_EXPAND_DEPTH = 16;
 
-  init(tokens, logger = nil, context = nil) {
+  init(tokens, logger = nil, context = nil, diagnostics = nil) {
     this.logger = logger;
+    this.diagnostics = diagnostics;
     this.symbols = (context != nil and context["symbols"] != nil) ? context["symbols"] : {};
     this.macros = (context != nil and context["macros"] != nil) ? context["macros"] : {};
     this.evaluator = ExpressionEvaluator();
@@ -20,12 +21,25 @@ class AssemblyPreprocessor {
     };
   }
 
+  report(line, message) {
+    if (this.diagnostics != nil) {
+      this.diagnostics.error(line, message);
+      return;
+    }
+
+    if (line == nil) {
+      print "Error: " + message;
+    } else {
+      print "Error on line " + line + ": " + message;
+    }
+    System.exit(1);
+  }
+
   process() {
     var expandedLines = this.processLines(this.lines, 0);
 
     if (this.conditionals.length() > 0) {
-      print "Error: Unclosed conditional directive at end of source.";
-      System.exit(1);
+      this.report(nil, "Unclosed conditional directive at end of source.");
     }
 
     var output = [];
@@ -81,7 +95,9 @@ class AssemblyPreprocessor {
 
       if (directive == ".MACRO") {
         var definition = this.parseMacroDefinition(line);
-        i = this.collectMacroBody(lines, i, definition);
+        if (definition != nil) {
+          i = this.collectMacroBody(lines, i, definition);
+        }
         continue;
       }
 
@@ -111,8 +127,8 @@ class AssemblyPreprocessor {
     }
 
     if (this.conditionals.length() == 0) {
-      print "Error on line " + line[0].line + ": " + directive + " without matching .IF.";
-      System.exit(1);
+      this.report(line[0].line, directive + " without matching .IF.");
+      return;
     }
 
     var frame = this.conditionals[this.conditionals.length() - 1];
@@ -142,7 +158,8 @@ class AssemblyPreprocessor {
     }
 
     var expression = this.tokensToString(line, 1);
-    return this.evaluator.evaluate(expression, this.symbols, 0x0801, false) != 0;
+    return this.evaluator.evaluate(expression, this.symbols, 0x0801, false,
+      this.diagnostics, line[0].line) != 0;
   }
 
   isActive() {
@@ -164,13 +181,14 @@ class AssemblyPreprocessor {
     }
 
     var expression = this.tokensToString(line, 2);
-    this.symbols[name] = this.evaluator.evaluate(expression, this.symbols, 0x0801, false);
+    this.symbols[name] = this.evaluator.evaluate(expression, this.symbols, 0x0801, false,
+      this.diagnostics, line[0].line);
   }
 
   parseMacroDefinition(line) {
     if (line.length() < 2) {
-      print "Error on line " + line[0].line + ": .MACRO requires a name.";
-      System.exit(1);
+      this.report(line[0].line, ".MACRO requires a name.");
+      return nil;
     }
 
     var name = line[1].lexeme.to_upper();
@@ -198,8 +216,8 @@ class AssemblyPreprocessor {
     }
 
     if (i >= lines.length()) {
-      print "Error: Missing .ENDMACRO for macro " + definition["name"] + ".";
-      System.exit(1);
+      this.report(nil, "Missing .ENDMACRO for macro " + definition["name"] + ".");
+      return i;
     }
 
     this.macros[definition["name"]] = definition;
@@ -208,15 +226,15 @@ class AssemblyPreprocessor {
 
   expandMacro(line, macro, depth) {
     if (depth > this.MAX_EXPAND_DEPTH) {
-      print "Error on line " + line[0].line + ": Macro expansion too deep.";
-      System.exit(1);
+      this.report(line[0].line, "Macro expansion too deep.");
+      return [];
     }
 
     var args = this.splitArgs(line, 1);
     if (args.length() != macro["params"].length()) {
-      print "Error on line " + line[0].line + ": Macro " + macro["name"] +
-        " expects " + macro["params"].length() + " argument(s), got " + args.length() + ".";
-      System.exit(1);
+      this.report(line[0].line, "Macro " + macro["name"] + " expects " +
+        macro["params"].length() + " argument(s), got " + args.length() + ".");
+      return [];
     }
 
     var expanded = [];

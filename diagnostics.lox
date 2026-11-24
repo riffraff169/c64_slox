@@ -1,0 +1,55 @@
+class AssemblyDiagnostics {
+  init(fileName = "<assembly>", sourceLines = nil, shared = nil) {
+    this.fileName = fileName;
+    this.sourceLines = sourceLines ?? [];
+    this.shared = shared ?? { "errors": 0, "warnings": 0 };
+  }
+
+  withSource(fileName, sourceLines) {
+    return AssemblyDiagnostics(fileName, sourceLines, this.shared);
+  }
+
+  error(line = nil, message = "", column = nil) {
+    this.emit("error", line, message, column);
+    this.shared["errors"] = this.shared["errors"] + 1;
+  }
+
+  warn(line = nil, message = "", column = nil) {
+    this.emit("warning", line, message, column);
+    this.shared["warnings"] = this.shared["warnings"] + 1;
+  }
+
+  errorCount() {
+    return this.shared["errors"];
+  }
+
+  warningCount() {
+    return this.shared["warnings"];
+  }
+
+  hasErrors() {
+    return this.errorCount() > 0;
+  }
+
+  printSummary() {
+    if (this.errorCount() == 0 and this.warningCount() == 0) return;
+
+    print this.fileName + ": " + this.errorCount() + " error(s), " +
+      this.warningCount() + " warning(s).";
+  }
+
+  emit(severity, line, message, column) {
+    var where = this.fileName;
+    if (line != nil) where = where + ":" + line;
+    print where + ": " + severity + ": " + message;
+
+    if (line == nil or line < 1 or line > this.sourceLines.length()) return;
+
+    print "  " + this.sourceLines[line - 1];
+    if (column != nil and column >= 1) {
+      var caret = "";
+      for (var i = 1; i < column; i += 1) caret = caret + " ";
+      print "  " + caret + "^";
+    }
+  }
+}
