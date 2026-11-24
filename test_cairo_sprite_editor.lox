@@ -191,36 +191,38 @@ color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
   "x": 24, "y": 130});
 color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
   "x": 24, "y": 130});
-print color_editor.color_dialog_pattern; // expect: nil
-print color_editor.last_pattern_click; // expect: canvas:0,0:2
 color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
   "x": 24, "y": 130});
 color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
   "x": 24, "y": 130});
-print color_editor.color_dialog_pattern; // expect: 2
-color_editor.handle_event({"type": X11.KeyPress,
-  "keysym": X11.XK_Escape, "text": ""});
 print color_editor.color_dialog_pattern; // expect: nil
-print color_editor.status; // expect: Color selection cancelled
+print color_editor.last_pattern_click; // expect: nil
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 69, "y": 130});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 69, "y": 130});
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 69, "y": 130});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 69, "y": 130});
+print color_editor.color_dialog_pattern; // expect: nil
+print color_editor.last_pattern_click; // expect: nil
 
-color_editor.render();
+color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
+  "x": 608, "y": 221});
+color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
+  "x": 608, "y": 221});
+print color_editor.last_pattern_click; // expect: palette:1
 color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
   "x": 24, "y": 130});
 color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
   "x": 24, "y": 130});
 color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
-  "x": 69, "y": 130});
+  "x": 24, "y": 130});
 color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
-  "x": 69, "y": 130});
+  "x": 24, "y": 130});
 print color_editor.color_dialog_pattern; // expect: nil
-print color_editor.last_pattern_click; // expect: canvas:2,0:2
-color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
-  "x": 69, "y": 130});
-color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
-  "x": 69, "y": 130});
-print color_editor.color_dialog_pattern; // expect: 2
-color_editor.handle_event({"type": X11.KeyPress,
-  "keysym": X11.XK_Escape, "text": ""});
+print color_editor.last_pattern_click; // expect: nil
 
 color_editor.render();
 color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
@@ -239,7 +241,7 @@ color_editor.handle_event({"type": X11.ButtonPress, "button": 1,
 color_editor.handle_event({"type": X11.ButtonRelease, "button": 1,
   "x": 10, "y": 200});
 print color_editor.color_dialog_pattern; // expect: nil
-print color_editor.color_dialog_close_repaints; // expect: 4
+print color_editor.color_dialog_close_repaints; // expect: 2
 
 color_editor.render();
 color_editor.handle_event({"type": X11.ButtonPress, "button": 1,

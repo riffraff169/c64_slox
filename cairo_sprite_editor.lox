@@ -412,8 +412,8 @@ class CairoSpriteEditor {
     return index;
   }
 
-  pattern_click_key(kind, target, pattern) {
-    return kind + ":" + target + ":" + pattern;
+  pattern_click_key(kind, pattern) {
+    return kind + ":" + pattern;
   }
 
   button_at(px, py) {
@@ -727,7 +727,7 @@ class CairoSpriteEditor {
 
     var palette_index = this.palette_index_at(px, py);
     if (palette_index != nil) {
-      var palette_key = this.pattern_click_key("palette", palette_index, palette_index);
+      var palette_key = this.pattern_click_key("palette", palette_index);
       if (this.is_multicolor and palette_index >= 1 and
           this.last_pattern_click == palette_key) {
         this.open_color_dialog(palette_index);
@@ -741,18 +741,7 @@ class CairoSpriteEditor {
     var cell = this.canvas_cell_at(px, py);
     if (cell != nil) {
       this.set_pixel(cell[0], cell[1]);
-      if (!this.is_multicolor) {
-        this.last_pattern_click = nil;
-        return;
-      }
-      var pair_x = cell[0] - (cell[0] % 2);
-      var canvas_target = pair_x + "," + cell[1];
-      var canvas_key = this.pattern_click_key("canvas", canvas_target, this.active_pattern);
-      if (this.active_pattern >= 1 and this.last_pattern_click == canvas_key) {
-        this.open_color_dialog(this.active_pattern);
-        return;
-      }
-      this.last_pattern_click = canvas_key;
+      this.last_pattern_click = nil;
     }
   }
 
