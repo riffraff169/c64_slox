@@ -1,0 +1,59 @@
+require("scanner.lox");
+require("c64_parser.lox");
+require("opcodes.lox");
+require("pass1.lox");
+require("pass2.lox");
+
+fun assemble(source) {
+  var tokens = AssemblyScanner(source).scanTokens();
+  var statements = AssemblyParser(tokens).parse();
+  var pass1Result = Pass1(statements, OPCODES).run();
+  var pass2Result = Pass2(
+      pass1Result["statements"],
+      pass1Result["symbolTable"],
+      OPCODES,
+      pass1Result["startAddress"]
+  ).run(source.split("\n"));
+
+  var bytes = pass2Result["bytes"];
+  var hexString = "";
+  for (var i = 0; i < bytes.length(); i += 1) {
+    if (i > 0) hexString = hexString + " ";
+    hexString = hexString + Math.hex(bytes[i], 2, false).to_upper();
+  }
+  return hexString;
+}
+
+var source = "* = $0801\n" +
+             "A = 2\n" +
+             ".IF A - 2\n" +
+             "  .byte $01\n" +
+             ".ELSE\n" +
+             "  .byte $02\n" +
+             ".ENDIF\n" +
+             ".IF A - 1\n" +
+             "  .byte $03\n" +
+             ".ELSEIF A - 2\n" +
+             "  .byte $04\n" +
+             ".ELSE\n" +
+             "  .byte $05\n" +
+             ".ENDIF\n" +
+             ".IFDEF A\n" +
+             "  .byte $06\n" +
+             ".ENDIF\n" +
+             ".IFNDEF B\n" +
+             "  .byte $07\n" +
+             ".ENDIF\n" +
+             ".IFDEF MISSING\n" +
+             "  .byte $FF\n" +
+             ".ELSE\n" +
+             "  .byte $08\n" +
+             ".ENDIF\n" +
+             ".IF 0\n" +
+             "  .IFDEF A\n" +
+             "    .byte $FF\n" +
+             "  .ENDIF\n" +
+             ".ELSE\n" +
+             "  .byte $09\n" +
+             ".ENDIF\n";
+print assemble(source); // expect: 02 03 06 07 08 09

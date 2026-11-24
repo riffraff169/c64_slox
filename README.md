@@ -51,6 +51,51 @@ Constants can be declared with `NAME = expr`, `NAME EQU expr`, or
 Expressions support decimal, `$hex`, `%binary`, current PC (`*`), symbols,
 `<`/`>` byte selectors, and `+`, `-`, and `*`.
 
+## Macros and conditionals
+
+A line-oriented preprocessor runs before the parser. Macros are defined with
+`.MACRO name p1, p2 ...` and `.ENDMACRO`, then invoked by name or with a
+leading dot:
+
+```asm
+.MACRO SETBORDER color
+  LDA #color
+  STA $D020
+.ENDMACRO
+
+  SETBORDER 2
+  .SETBORDER 3
+```
+
+Parameters are substituted as tokens, so they can stand in for instructions,
+operands, or whole directive arguments. Nested macro invocations and
+conditionals inside macro bodies are expanded only when their branch is
+active. Expansion is limited to 16 nested levels to catch recursion.
+
+Conditional assembly uses `.IF expr`, `.ELSEIF expr`, `.ELSE`, and `.ENDIF`,
+plus `.IFDEF name` and `.IFNDEF name`:
+
+```asm
+DEBUG = 1
+
+.IF DEBUG
+  LDA #$01
+.ELSEIF RELEASE
+  LDA #$02
+.ELSE
+  LDA #$03
+.ENDIF
+
+.IFDEF TARGET
+  .byte TARGET
+.ENDIF
+```
+
+Constants declared with `=`, `EQU`, or `.EQU` are visible to `.IFDEF` and
+`.IFNDEF` after their declaration. Undefined symbols used in `.IF` and
+`.ELSEIF` expressions evaluate to `0`; ordinary assembly expressions still
+report undefined symbols as errors.
+
 ## Tests
 
 From this directory:

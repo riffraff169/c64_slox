@@ -10,6 +10,8 @@ TESTS=(
   test_pass1.lox
   test_assembler.lox
   test_directives.lox
+  test_macros.lox
+  test_conditionals.lox
   test_writeprg.lox
   test_d64writer.lox
 )
