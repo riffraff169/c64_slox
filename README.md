@@ -75,8 +75,8 @@ Controls:
 - `M` switches between single-color and multicolor mode
 - `1`-`4` select a pattern (`3` and `4` are multicolor only)
 - `P` or the Colors button opens the color picker for the active multicolor pattern
-- In multicolor mode, clicking an already selected pattern row or block a second
-  time opens its color picker; pattern `00` has no color picker
+- In multicolor mode, clicking the same selected pattern row or the same sprite
+  block twice opens its color picker; pattern `00` has no color picker
 - `S` / `L` open the save/load filename dialog
 - `C` clears the sprite, `Q` or `Esc` quits
 
