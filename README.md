@@ -123,15 +123,27 @@ Expressions support decimal, `$hex`, `%binary`, current PC (`*`), symbols,
 `<`/`>` byte selectors, `+`, `-`, `*`, `%` modulo, and `==` equality. Equality
 returns `1` when both sides match and `0` otherwise.
 
-Pass 1 repeats until symbol addresses and instruction sizes settle, so forward
-references and expressions use zero-page encodings when their final value is at
-most `$FF`. A zero-page operand above `$FF` is an error.
+Pass 1 starts by assuming that unknown forward operands can use zero page, then
+repeats until symbol addresses and instruction sizes settle. This prefers the
+smallest stable layout. If an operand's value moves outside `$00-$FF` because
+the instruction itself changed size, it is promoted to absolute. If that value
+would flip back and forth, the operand is fixed to absolute so assembly
+terminates.
 
 ```asm
 * = $0020
   LDA later       ; emits A5 23 when later lands at $0023
   RTS
 later:
+```
+
+A label exactly at the zero-page boundary keeps the two-byte form:
+
+```asm
+* = $00FC
+  LDA later       ; emits A5 FF, not AD FF 00
+  RTS
+later:            ; $00FF
 ```
 
 Use `.ASSERT` to enforce layout rules such as sprite alignment. Put the label
