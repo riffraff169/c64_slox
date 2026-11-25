@@ -229,7 +229,8 @@ class Pass1 {
       if (typeof(stmt.operand) == "Array") return stmt.operand.length() * 2;
       return 2;
     }
-    if (name == ".TEXT" or name == ".STRING") {
+    if (name == ".TEXT" or name == ".STRING" or
+        name == ".PET" or name == ".SCREEN") {
       return stmt.operand.length();
     }
     if (name == ".ALIGN") {
