@@ -13,6 +13,7 @@ TESTS=(
   test_fixpoint.lox
   test_assert.lox
   test_undocumented.lox
+  test_anon_labels.lox
   test_textconv.lox
   test_macros.lox
   test_conditionals.lox

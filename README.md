@@ -146,6 +146,21 @@ A label exactly at the zero-page boundary keeps the two-byte form:
 later:            ; $00FF
 ```
 
+Named labels use `name:`. Anonymous labels use `+:` and `-:` on their own line.
+In a branch operand, one `+` or `-` selects the nearest definition in that
+direction. Repeated markers select farther definitions, so `++` means the
+second `+:` forward and `--` means the second `-:` backward.
+
+```asm
+* = $0800
+-:
+  BNE +         ; branch to the next +:
+  NOP
++:
+  BNE -         ; branch to the previous -:
+  RTS
+```
+
 Use `.ASSERT` to enforce layout rules such as sprite alignment. Put the label
 on its own line after `.ALIGN` so it receives the aligned address:
 

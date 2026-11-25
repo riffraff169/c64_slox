@@ -1,0 +1,65 @@
+require("diagnostics.lox");
+require("scanner.lox");
+require("c64_parser.lox");
+require("opcodes.lox");
+require("pass1.lox");
+require("pass2.lox");
+
+fun assemble_hex(source) {
+  var tokens = AssemblyScanner(source).scanTokens();
+  var statements = AssemblyParser(tokens).parse();
+  var pass1Result = run_pass1_to_fixpoint(statements, OPCODES);
+  var pass2Result = Pass2(
+      pass1Result["statements"],
+      pass1Result["symbolTable"],
+      OPCODES,
+      pass1Result["startAddress"]
+  ).run(nil);
+
+  var bytes = pass2Result["bytes"];
+  var hexString = "";
+  for (var i = 0; i < bytes.length(); i += 1) {
+    if (i > 0) hexString = hexString + " ";
+    hexString = hexString + Math.hex(bytes[i], 2, false).to_upper();
+  }
+  return hexString;
+}
+
+var forwardOne = "* = $0800\n" +
+                 "  BNE +\n" +
+                 "  NOP\n" +
+                 "+:\n" +
+                 "  RTS\n";
+print assemble_hex(forwardOne); // expect: D0 01 EA 60
+
+var backwardOne = "* = $0800\n" +
+                  "-:\n" +
+                  "  NOP\n" +
+                  "  BNE -\n";
+print assemble_hex(backwardOne); // expect: EA D0 FD
+
+var forwardTwo = "* = $0800\n" +
+                 "  BNE ++\n" +
+                 "  BNE +\n" +
+                 "+:\n" +
+                 "  NOP\n" +
+                 "+:\n" +
+                 "  RTS\n";
+print assemble_hex(forwardTwo); // expect: D0 03 D0 00 EA 60
+
+var backwardTwo = "* = $0800\n" +
+                  "-:\n" +
+                  "  NOP\n" +
+                  "-:\n" +
+                  "  BNE --\n" +
+                  "  BNE -\n";
+print assemble_hex(backwardTwo); // expect: EA D0 FD D0 FC
+
+var missingSource = "* = $0800\n" +
+                    "  BNE +\n";
+var missingDiag = AssemblyDiagnostics("bad_anon.a64", missingSource.split("\n"));
+var missingTokens = AssemblyScanner(missingSource, nil, missingDiag).scanTokens();
+AssemblyParser(missingTokens, nil, nil, nil, missingDiag).parse();
+// expect: bad_anon.a64:2: error: No matching '+' anonymous label
+// expect:     BNE +
+print missingDiag.errorCount(); // expect: 1
