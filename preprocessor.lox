@@ -238,13 +238,15 @@ class AssemblyPreprocessor {
     }
 
     var expanded = [];
+    var invocationLine = line[0].line;
     for (var i = 0; i < macro["lines"].length(); i += 1) {
-      expanded.push(this.substitute(macro["lines"][i], macro["params"], args));
+      expanded.push(this.substitute(macro["lines"][i], macro["params"], args,
+        invocationLine));
     }
     return this.processLines(expanded, depth);
   }
 
-  substitute(line, params, args) {
+  substitute(line, params, args, lineNumber = nil) {
     var result = [];
 
     for (var i = 0; i < line.length(); i += 1) {
@@ -261,10 +263,10 @@ class AssemblyPreprocessor {
       if (paramIdx >= 0) {
         var arg = args[paramIdx];
         for (var a = 0; a < arg.length(); a += 1) {
-          result.push(this.cloneToken(arg[a], token.line));
+          result.push(this.cloneToken(arg[a], lineNumber ?? token.line));
         }
       } else {
-        result.push(this.cloneToken(token));
+        result.push(this.cloneToken(token, lineNumber));
       }
     }
 

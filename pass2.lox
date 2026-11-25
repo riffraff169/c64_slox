@@ -1,5 +1,6 @@
 require("expr.lox");
 require("textconv.lox");
+require("cycles.lox");
 
 class Pass2 {
   init(statements, symbolTable, opcodes, startAddress = 0x0801, diagnostics = nil) {
@@ -48,18 +49,19 @@ class Pass2 {
       // 4. advance pass 2's current address counter
       this.currentAddress += emittedBytes.length();
 
-      var sourceText = "";
-      if (sourceLines and stmt.line <= sourceLines.length()) {
+      var sourceText = stmt.source_text;
+      if (sourceText == nil and sourceLines and stmt.line <= sourceLines.length()) {
         sourceText = sourceLines[stmt.line - 1];
-      } else {
-        sourceText = stmt.name ?? "";
       }
+      if (sourceText == nil) sourceText = stmt.name ?? "";
 
-      // 5. get source line text
+      // 5. collect listing metadata
       listingEntries.push({
           "line": stmt.line,
+          "source_file": stmt.source_file ?? "",
           "address": stmt.pc,
           "bytes": emittedBytes,
+          "cycles": stmt.cycle_text ?? "",
           "source": sourceText
           });
     }
@@ -82,9 +84,11 @@ class Pass2 {
 
     var opcodeObj = this.opcodes[mnemonic][mode];
     this.emitByte(opcodeObj.code);
+    stmt.cycle_text = "";
 
     // implied & accumulator modes emit no operand bytes
     if (mode == AddressingMode.IMPLIED or mode == AddressingMode.ACCUMULATOR) {
+      stmt.cycle_text = cycle_text(mnemonic, mode, nil, stmt.pc);
       return;
     }
 
@@ -104,6 +108,8 @@ class Pass2 {
     }
 
     // 3. emit operand bytes base on mode
+    var cycles = cycle_text(mnemonic, mode, val, stmt.pc);
+
     if (mode == AddressingMode.RELATIVE) {
       // relative branch offset calculation: target_address - (current_pc + 2)
       var offset = val - (stmt.pc + 2);
@@ -118,6 +124,7 @@ class Pass2 {
         offset += 256;
       }
 
+      stmt.cycle_text = cycles;
       this.emitByte(offset);
     } else if (mode == AddressingMode.IMMEDIATE or
         mode == AddressingMode.ZERO_PAGE or
@@ -125,12 +132,14 @@ class Pass2 {
         mode == AddressingMode.ZERO_PAGE_Y or
         mode == AddressingMode.IND_X or
         mode == AddressingMode.IND_Y) {
+      stmt.cycle_text = cycles;
       this.emitByte(val);
     } else if (mode == AddressingMode.ABSOLUTE or
         mode == AddressingMode.ABSOLUTE_X or
         mode == AddressingMode.ABSOLUTE_Y or
         mode == AddressingMode.INDIRECT) {
       // 16-bit address (little-endian: low byte, high byte)
+      stmt.cycle_text = cycles;
       this.emitWord(val);
     }
   }

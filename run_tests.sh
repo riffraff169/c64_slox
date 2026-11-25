@@ -14,6 +14,7 @@ TESTS=(
   test_assert.lox
   test_undocumented.lox
   test_anon_labels.lox
+  test_listing_output.lox
   test_textconv.lox
   test_macros.lox
   test_conditionals.lox

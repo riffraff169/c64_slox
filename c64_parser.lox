@@ -44,7 +44,27 @@ class AssemblyParser {
         }
       }
     }
-    return this.resolve_anonymous_labels(statements);
+    return this.attach_source_info(this.resolve_anonymous_labels(statements));
+  }
+
+  attach_source_info(statements) {
+    if (this.diagnostics == nil) return statements;
+
+    var sourceLines = this.diagnostics.sourceLines ?? [];
+    for (var i = 0; i < statements.length(); i += 1) {
+      var stmt = statements[i];
+      if (stmt.source_file == nil) {
+        stmt.source_file = this.diagnostics.fileName;
+      }
+      if (stmt.source_text == nil) {
+        if (stmt.line >= 1 and stmt.line <= sourceLines.length()) {
+          stmt.source_text = sourceLines[stmt.line - 1];
+        } else {
+          stmt.source_text = stmt.name ?? "";
+        }
+      }
+    }
+    return statements;
   }
 
   parseLine() {

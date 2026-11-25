@@ -26,6 +26,9 @@ class Statement {
     this.anonymous_ref = nil; // { marker, distance } for branch operands
     this.operand = operand; // raw expression / value / symbol
     this.line = line;
+    this.source_file = nil; // file that originally contained this statement
+    this.source_text = nil; // exact source line that produced this statement
+    this.cycle_text = ""; // set by pass 2 for listing output
   }
 
   to_string() {
