@@ -1,0 +1,42 @@
+class TextConv {
+  static toCode(value) {
+    if (isstring(value)) {
+      if (value.length() == 0) return 0;
+      return value[0];
+    }
+    return Integer(value) % 256;
+  }
+
+  static petCode(value) {
+    var code = TextConv.toCode(value);
+    if (code == 10 or code == 13) return 13;
+    return code;
+  }
+
+  static petBytes(text) {
+    var result = [];
+    for (var i = 0; i < text.length(); i += 1) {
+      result.push(TextConv.petCode(text[i]));
+    }
+    return result;
+  }
+
+  static screenCode(value) {
+    var code = TextConv.toCode(value);
+
+    if (code >= 0x41 and code <= 0x5A) return code - 0x40;
+    if (code >= 0x61 and code <= 0x7A) return code - 0x60;
+    if (code == 0x40) return 0;
+    if (code >= 0x5B and code <= 0x5F) return code - 0x40;
+    if (code >= 0x20 and code <= 0x3F) return code;
+    return code % 64;
+  }
+
+  static screenBytes(text) {
+    var result = [];
+    for (var i = 0; i < text.length(); i += 1) {
+      result.push(TextConv.screenCode(text[i]));
+    }
+    return result;
+  }
+}

@@ -1,4 +1,5 @@
 require("expr.lox");
+require("textconv.lox");
 
 class Pass2 {
   init(statements, symbolTable, opcodes, startAddress = 0x0801, diagnostics = nil) {
@@ -151,6 +152,16 @@ class Pass2 {
       var str = stmt.operand;
       for (var i = 0; i < str.length(); i += 1) {
         this.emitByte(str[i]);
+      }
+    } else if (name == ".PET") {
+      var petBytes = TextConv.petBytes(stmt.operand);
+      for (var i = 0; i < petBytes.length(); i += 1) {
+        this.emitByte(petBytes[i]);
+      }
+    } else if (name == ".SCREEN") {
+      var screenBytes = TextConv.screenBytes(stmt.operand);
+      for (var i = 0; i < screenBytes.length(); i += 1) {
+        this.emitByte(screenBytes[i]);
       }
     } else if (name == ".ALIGN") {
       for (var i = 0; i < stmt.size; i += 1) {

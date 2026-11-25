@@ -105,6 +105,10 @@ The original notcurses editor is unchanged and remains available through
 - `.BYTE expr[, expr ...]` - emit byte values or expressions
 - `.WORD expr[, expr ...]` - emit 16-bit little-endian values
 - `.TEXT "text"` / `.STRING "text"` - emit raw string bytes
+- `.PET "text"` - emit PETSCII bytes; uppercase letters are `$41`-`$5A` and
+  lowercase letters are `$61`-`$7A`
+- `.SCREEN "text"` - emit screen codes for direct screen memory; uppercase and
+  lowercase letters both become `$01`-`$1A`, and `@` becomes `$00`
 - `.ALIGN boundary` - pad to the next boundary
 - `.FILL count[, byte]` - emit `count` copies of `byte` (default `$00`)
 - `.RES count[, byte]` - reserve bytes, equivalent to `.FILL`

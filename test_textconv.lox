@@ -1,0 +1,9 @@
+require("textconv.lox");
+
+print TextConv.petCode("A"); // expect: 65
+print TextConv.petCode("a"); // expect: 97
+print TextConv.petCode("\n"); // expect: 13
+print TextConv.screenCode("A"); // expect: 1
+print TextConv.screenCode("a"); // expect: 1
+print TextConv.screenCode("@"); // expect: 0
+print TextConv.screenCode("["); // expect: 27
