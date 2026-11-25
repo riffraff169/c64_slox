@@ -49,3 +49,20 @@ var forwardHighLabel = "* = $0801\n" +
 result = assemble_hex(forwardHighLabel);
 print result["passes"]; // expect: 3
 print result["hex"]; // expect: AD 05 08 60
+
+var zpBoundary = "* = $00FC\n" +
+                 "  LDA later\n" +
+                 "  RTS\n" +
+                 "later:\n";
+result = assemble_hex(zpBoundary);
+print result["passes"]; // expect: 2
+print result["hex"]; // expect: A5 FF 60
+
+var oscillatingOperand = "* = $0000\n" +
+                         "K = $0103\n" +
+                         "  LDA K - later\n" +
+                         "  RTS\n" +
+                         "later:\n";
+result = assemble_hex(oscillatingOperand);
+print result["passes"]; // expect: 4
+print result["hex"]; // expect: AD FF 00 60

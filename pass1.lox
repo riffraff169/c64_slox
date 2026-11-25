@@ -162,9 +162,12 @@ class Pass1 {
     var mode = stmt.baseMode ?? stmt.mode;
     stmt.mode = mode;
 
-    if (mode == AddressingMode.ABSOLUTE or
-        mode == AddressingMode.ABSOLUTE_X or
-        mode == AddressingMode.ABSOLUTE_Y) {
+    if (!stmt.force_absolute and
+        (mode == AddressingMode.ABSOLUTE or
+         mode == AddressingMode.ABSOLUTE_X or
+         mode == AddressingMode.ABSOLUTE_Y)) {
+      // Non-strict evaluation maps unknown forward symbols to 0, which seeds
+      // the fixpoint with the smallest possible zero-page layout.
       var val = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
         false, nil, stmt.line);
 
@@ -288,10 +291,37 @@ fun statement_layout_key(statements) {
   return key;
 }
 
+fun statement_modes(statements) {
+  var modes = [];
+  for (var i = 0; i < statements.length(); i += 1) {
+    modes = modes + [(statements[i].mode ?? "")];
+  }
+  return modes;
+}
+
+fun freeze_cycle_statements(statements, previousModes, modes, verbose) {
+  var frozen = 0;
+  for (var i = 0; i < statements.length(); i += 1) {
+    var stmt = statements[i];
+    if (stmt.type == "INSTRUCTION" and modes[i] != previousModes[i] and
+        !stmt.force_absolute) {
+      stmt.force_absolute = true;
+      frozen += 1;
+    }
+  }
+
+  if (verbose and frozen > 0) {
+    print "  Breaking layout cycle by forcing " + frozen + " operand(s) absolute";
+  }
+  return frozen;
+}
+
 fun run_pass1_to_fixpoint(statements, opcodes, diagnostics = nil, verbose = false) {
-  var maxPasses = 16;
+  var maxPasses = 32 + (statements.length() * 2);
   var previousSymbols = nil;
   var previousLayout = nil;
+  var previousModes = nil;
+  var seenLayouts = {};
   var result = nil;
   var converged = false;
   var passCount = maxPasses;
@@ -302,6 +332,7 @@ fun run_pass1_to_fixpoint(statements, opcodes, diagnostics = nil, verbose = fals
     previousSymbols = result["symbolTable"];
 
     var layout = statement_layout_key(statements);
+    var modes = statement_modes(statements);
     if (verbose) print "  Pass 1 iteration " + (pass + 1) + ": " + layout;
 
     if (previousLayout != nil and layout == previousLayout) {
@@ -309,7 +340,17 @@ fun run_pass1_to_fixpoint(statements, opcodes, diagnostics = nil, verbose = fals
       passCount = pass + 1;
       break;
     }
+
+    if (seenLayouts.has(layout)) {
+      if (freeze_cycle_statements(statements, previousModes, modes, verbose) > 0) {
+        seenLayouts = {};
+      }
+    } else {
+      seenLayouts[layout] = true;
+    }
+
     previousLayout = layout;
+    previousModes = modes;
   }
 
   if (!converged) {

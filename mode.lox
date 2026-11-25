@@ -21,6 +21,7 @@ class Statement {
     this.name = name;   // "LDA", ".byte", etc
     this.mode = mode;   // AddressingMode constant
     this.baseMode = mode; // parser-selected mode, kept across fixpoint passes
+    this.force_absolute = false; // set when ZP selection would oscillate
     this.operand = operand; // raw expression / value / symbol
     this.line = line;
   }
