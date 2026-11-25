@@ -15,3 +15,9 @@ print evaluator.evaluate("<LABEL", symbols, pc); // expect: 52
 print evaluator.evaluate(">LABEL", symbols, pc); // expect: 18
 print evaluator.evaluate("ZERO", symbols, pc); // expect: 0
 print evaluator.evaluate("*", symbols, pc); // expect: 36864
+print evaluator.evaluate("17 % 5", symbols, pc); // expect: 2
+print evaluator.evaluate("%1010", symbols, pc); // expect: 10
+print evaluator.evaluate("%1010 + 1", symbols, pc); // expect: 11
+print evaluator.evaluate("LABEL == 4660", symbols, pc); // expect: 1
+print evaluator.evaluate("LABEL == 0", symbols, pc); // expect: 0
+print evaluator.evaluate("$1234 % 64 == 52", symbols, pc); // expect: 1

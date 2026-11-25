@@ -1,0 +1,56 @@
+require("diagnostics.lox");
+require("scanner.lox");
+require("c64_parser.lox");
+require("opcodes.lox");
+require("pass1.lox");
+require("pass2.lox");
+
+fun run_assembly(source, diagnostics) {
+  var tokens = AssemblyScanner(source, nil, diagnostics).scanTokens();
+  var statements = AssemblyParser(tokens, nil, nil, nil, diagnostics).parse();
+  var pass1Result = run_pass1_to_fixpoint(statements, OPCODES, diagnostics);
+  return Pass2(
+      pass1Result["statements"],
+      pass1Result["symbolTable"],
+      OPCODES,
+      pass1Result["startAddress"],
+      diagnostics
+  ).run(source.split("\n"));
+}
+
+var alignedSource = "* = $0840\n" +
+                    "  .align 64\n" +
+                    "  .assert sprite_data % 64 == 0, \"sprite data must be 64-byte aligned\"\n" +
+                    "sprite_data:\n" +
+                    "  .fill 4, $ff\n";
+var alignedDiag = AssemblyDiagnostics("align_ok.a64", alignedSource.split("\n"));
+var alignedResult = run_assembly(alignedSource, alignedDiag);
+print alignedResult["bytes"].length(); // expect: 4
+print alignedDiag.errorCount(); // expect: 0
+
+var badSource = "* = $0841\n" +
+                "sprite_data:\n" +
+                "  .assert sprite_data % 64 == 0, \"sprite data must be 64-byte aligned\"\n";
+var badDiag = AssemblyDiagnostics("align_fail.a64", badSource.split("\n"));
+run_assembly(badSource, badDiag);
+// expect: align_fail.a64:3: error: Assertion failed: sprite data must be 64-byte aligned (sprite_data % 64 == 0)
+// expect:     .assert sprite_data % 64 == 0, "sprite data must be 64-byte aligned"
+print badDiag.errorCount(); // expect: 1
+
+var badAlignSource = "* = $0801\n" +
+                     "  .align 3\n" +
+                     "  RTS\n";
+var badAlignDiag = AssemblyDiagnostics("bad_align.a64", badAlignSource.split("\n"));
+run_assembly(badAlignSource, badAlignDiag);
+// expect: bad_align.a64:2: error: .ALIGN boundary must be a power of two
+// expect:     .align 3
+print badAlignDiag.errorCount(); // expect: 1
+
+var badFillSource = "* = $0801\n" +
+                    "  .res -2\n" +
+                    "  RTS\n";
+var badFillDiag = AssemblyDiagnostics("bad_fill.a64", badFillSource.split("\n"));
+run_assembly(badFillSource, badFillDiag);
+// expect: bad_fill.a64:2: error: .RES count must not be negative
+// expect:     .res -2
+print badFillDiag.errorCount(); // expect: 1

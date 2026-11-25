@@ -1,0 +1,51 @@
+require("scanner.lox");
+require("c64_parser.lox");
+require("opcodes.lox");
+require("pass1.lox");
+require("pass2.lox");
+
+fun assemble_hex(source) {
+  var tokens = AssemblyScanner(source).scanTokens();
+  var statements = AssemblyParser(tokens).parse();
+  var pass1Result = run_pass1_to_fixpoint(statements, OPCODES);
+  var pass2Result = Pass2(
+      pass1Result["statements"],
+      pass1Result["symbolTable"],
+      OPCODES,
+      pass1Result["startAddress"]
+  ).run(nil);
+
+  var bytes = pass2Result["bytes"];
+  var hexString = "";
+  for (var i = 0; i < bytes.length(); i += 1) {
+    if (i > 0) hexString = hexString + " ";
+    hexString = hexString + Math.hex(bytes[i], 2, false).to_upper();
+  }
+  return { "passes": pass1Result["passes"], "hex": hexString };
+}
+
+var forwardConst = "* = $0801\n" +
+                   "  LDA fwd_const\n" +
+                   "  STA zp_base + 1\n" +
+                   "  RTS\n" +
+                   "zp_base = $20\n" +
+                   "fwd_const = $21\n";
+var result = assemble_hex(forwardConst);
+print result["passes"]; // expect: 2
+print result["hex"]; // expect: A5 21 85 21 60
+
+var forwardZpLabel = "* = $0020\n" +
+                     "  LDA later\n" +
+                     "  RTS\n" +
+                     "later:\n";
+result = assemble_hex(forwardZpLabel);
+print result["passes"]; // expect: 2
+print result["hex"]; // expect: A5 23 60
+
+var forwardHighLabel = "* = $0801\n" +
+                       "  LDA later\n" +
+                       "  RTS\n" +
+                       "later:\n";
+result = assemble_hex(forwardHighLabel);
+print result["passes"]; // expect: 3
+print result["hex"]; // expect: AD 05 08 60

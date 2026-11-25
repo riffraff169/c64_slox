@@ -7,6 +7,21 @@ class ExpressionEvaluator {
     return last;
   }
 
+  find_from(text, needle, start) {
+    for (var i = start; i + needle.length() <= text.length(); i += 1) {
+      if (text.slice(i, i + needle.length()) == needle) return i;
+    }
+    return -1;
+  }
+
+  is_binary_string(text) {
+    if (text == nil or text.length() == 0) return false;
+    for (var i = 0; i < text.length(); i += 1) {
+      if (text[i] != '0' and text[i] != '1') return false;
+    }
+    return true;
+  }
+
   isIntegerString(text) {
     if (text == nil or text == "") return false;
     var start = 0;
@@ -40,7 +55,20 @@ class ExpressionEvaluator {
       return subVal % 256;
     }
 
-    // simple addition / subtraction / multiplication
+    // binary literal (%1010), but not the modulo operator
+    if (trimmed[0] == '%' and this.is_binary_string(trimmed.slice(1))) {
+      return Math.from_bin(trimmed.slice(1));
+    }
+
+    // equality (==) returns 1 or 0
+    var equal = trimmed.find("==");
+    if (equal >= 0) {
+      var lhs = this.evaluate(trimmed.slice(0, equal), symbolTable, currentPC, strict, diagnostics, line);
+      var rhs = this.evaluate(trimmed.slice(equal + 2), symbolTable, currentPC, strict, diagnostics, line);
+      return (lhs == rhs) ? 1 : 0;
+    }
+
+    // simple addition / subtraction
     var plus = trimmed.find("+");
     if (plus >= 0) {
       return this.evaluate(trimmed.slice(0, plus), symbolTable, currentPC, strict, diagnostics, line) +
@@ -57,20 +85,50 @@ class ExpressionEvaluator {
     // current pc symbol (*)
     if (trimmed == "*") return currentPC;
 
-    var star = trimmed.find("*");
-    if (star >= 0) {
-      return this.evaluate(trimmed.slice(0, star), symbolTable, currentPC, strict, diagnostics, line) *
-        this.evaluate(trimmed.slice(star + 1), symbolTable, currentPC, strict, diagnostics, line);
+    // multiplication and modulo share precedence and associate left to right
+    var star = this.find_from(trimmed, "*", 1);
+    var modulo = trimmed.find("%");
+    var opIdx = -1;
+    var op = "";
+
+    if (modulo > 0 and star > 0) {
+      if (modulo < star) {
+        opIdx = modulo;
+        op = "%";
+      } else {
+        opIdx = star;
+        op = "*";
+      }
+    } else if (modulo > 0) {
+      opIdx = modulo;
+      op = "%";
+    } else if (star > 0) {
+      opIdx = star;
+      op = "*";
+    }
+
+    if (opIdx >= 0) {
+      var leftVal = this.evaluate(trimmed.slice(0, opIdx), symbolTable, currentPC, strict, diagnostics, line);
+      var rightVal = this.evaluate(trimmed.slice(opIdx + 1), symbolTable, currentPC, strict, diagnostics, line);
+
+      if (op == "*") return leftVal * rightVal;
+
+      if (rightVal == 0) {
+        var message = "Modulo by zero";
+        if (!strict) return 0;
+        if (diagnostics != nil) {
+          diagnostics.error(line, message);
+          return 0;
+        }
+        print "Error: " + message;
+        System.exit(1);
+      }
+      return leftVal % rightVal;
     }
 
     // hex literal ($d020)
     if (trimmed[0] == '$') {
       return Math.from_hex("0x" + trimmed.slice(1));
-    }
-
-    // binary literal
-    if (trimmed[0] == '%') {
-      return Math.from_bin(trimmed.slice(1));
     }
 
     if (symbolTable.has(trimmed)) {

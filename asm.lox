@@ -82,9 +82,10 @@ abortOnErrors(diagnostics);
 if (verbose) print "Scanned " + tokens.length() + " tokens into " + statements.length() + " statements.";
 
 // 4. Pass 1: Symbol Table & Address Resolution
-var pass1 = Pass1(statements, OPCODES, diagnostics);
-var pass1Result = pass1.run();
+var pass1Result = run_pass1_to_fixpoint(statements, OPCODES, diagnostics, verbose);
 var symbolTable = pass1Result["symbolTable"];
+
+if (verbose) print "Pass 1 converged in " + pass1Result["passes"] + " iteration(s).";
 
 abortOnErrors(diagnostics);
 

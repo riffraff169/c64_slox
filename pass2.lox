@@ -92,6 +92,17 @@ class Pass2 {
     var val = this.resolveOperand(stmt.operand, stmt.pc, stmt.line);
     if (val == nil) return;
 
+    if (mode == AddressingMode.ZERO_PAGE or
+        mode == AddressingMode.ZERO_PAGE_X or
+        mode == AddressingMode.ZERO_PAGE_Y or
+        mode == AddressingMode.IND_X or
+        mode == AddressingMode.IND_Y) {
+      if (val < 0 or val > 255) {
+        this.report(stmt.line, "Zero-page operand out of range (" + val + ")");
+        return;
+      }
+    }
+
     // 3. emit operand bytes base on mode
     if (mode == AddressingMode.RELATIVE) {
       // relative branch offset calculation: target_address - (current_pc + 2)
@@ -163,11 +174,26 @@ class Pass2 {
       for (var i = 0; i < screenBytes.length(); i += 1) {
         this.emitByte(screenBytes[i]);
       }
+    } else if (name == ".ASSERT") {
+      var ok = this.resolveOperand(stmt.operand, currentPC, stmt.line);
+      if (ok == nil) return;
+
+      if (ok == 0) {
+        var message = stmt.message ?? "assertion failed";
+        if (message == "") message = "assertion failed";
+        this.report(stmt.line, "Assertion failed: " + message + " (" + stmt.operand + ")");
+      }
     } else if (name == ".ALIGN") {
+      var boundaryCheck = this.resolveOperand(stmt.operand, currentPC, stmt.line);
+      if (boundaryCheck == nil) return;
+
       for (var i = 0; i < stmt.size; i += 1) {
         this.emitByte(0x00);
       }
     } else if (name == ".FILL" or name == ".RES") {
+      var countCheck = this.resolveOperand(stmt.operand, currentPC, stmt.line);
+      if (countCheck == nil) return;
+
       var fillVal = 0x00;
       if (stmt.fillValExpr and stmt.fillValExpr != "") {
         fillVal = this.resolveOperand(stmt.fillValExpr, currentPC, stmt.line) ?? 0x00;
