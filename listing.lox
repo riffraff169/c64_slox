@@ -22,24 +22,27 @@ class ListingWriter {
     lines.push("; ==================================================================");
     lines.push("; 6502 ASSEMBLY LISTING");
     lines.push("; ==================================================================");
-    lines.push("LINE  ADDR   HEX BYTES      SOURCE");
-    lines.push("------------------------------------------------------------------");
+    lines.push("LINE  FILE                      ADDR   CYCLES HEX BYTES      SOURCE");
+    lines.push("--------------------------------------------------------------------------------------------");
 
     for (var i = 0; i < entries.length(); i += 1) {
       var entry = entries[i];
       var lineNum = this.padLeft("" + (entry["line"] ?? i + 1), 4, "0");
+      var fileText = this.padRight(entry["source_file"] ?? "", 24);
+      var cyclesText = this.padRight(entry["cycles"] ?? "", 6);
+
+      var addrText = "     ";
+      if (entry["address"] != nil) {
+        addrText = "$" + Math.hex(entry["address"], 4, false);
+      }
 
       // Handle directives or labels that do not emit machine bytes
       if (entry["bytes"] == nil or entry["bytes"].length() == 0) {
-        var addrText = (entry["address"] != nil) 
-          ? "$" + Math.hex(entry["address"], 4, false) 
-          : "    ";
-        lines.push(lineNum + "  " + addrText + "   " + this.padRight("", 14) + entry["source"]);
+        lines.push(lineNum + "  " + fileText + "  " + addrText + "  " +
+          cyclesText + " " + this.padRight("", 14) + entry["source"]);
         continue;
       }
 
-      var addrHex = "$" + Math.hex(entry["address"], 4, false);
-      
       // Format opcode + operand bytes (e.g. "8D 20 D0 ")
       var bytesHex = "";
       var bytes = entry["bytes"];
@@ -47,7 +50,8 @@ class ListingWriter {
         bytesHex = bytesHex + Math.hex(bytes[b], 2, false) + " ";
       }
 
-      lines.push(lineNum + "  " + addrHex + "  " + this.padRight(bytesHex, 14) + entry["source"]);
+      lines.push(lineNum + "  " + fileText + "  " + addrText + "  " +
+        cyclesText + " " + this.padRight(bytesHex, 14) + entry["source"]);
     }
 
     // Append Symbol Cross-Reference Table
@@ -59,10 +63,9 @@ class ListingWriter {
       var keys = symbolTable.keys();
       for (var k = 0; k < keys.length(); k += 1) {
         var name = keys[k];
-        if (name and name != "") {
-          var addr = Math.hex(symbolTable[name], 4, false);
-          lines.push(this.padRight(name, 24) + " = $" + addr);
-        }
+        if (name == "" or name.slice(0, 1) == "@") continue;
+        var addr = Math.hex(symbolTable[name], 4, false);
+        lines.push(this.padRight(name, 24) + " = $" + addr);
       }
     }
 

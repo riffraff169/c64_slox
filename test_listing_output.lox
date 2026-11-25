@@ -1,0 +1,114 @@
+require("diagnostics.lox");
+require("scanner.lox");
+require("c64_parser.lox");
+require("opcodes.lox");
+require("pass1.lox");
+require("pass2.lox");
+require("listing.lox");
+require("sym_writer.lox");
+
+fun assemble_with_source(source, path) {
+  var diagnostics = AssemblyDiagnostics(path, source.split("\n"));
+  var tokens = AssemblyScanner(source, nil, diagnostics).scanTokens();
+  var statements = AssemblyParser(tokens, nil, nil, nil, diagnostics).parse();
+  var pass1Result = Pass1(statements, OPCODES).run();
+  var pass2Result = Pass2(
+      pass1Result["statements"],
+      pass1Result["symbolTable"],
+      OPCODES,
+      pass1Result["startAddress"]
+  ).run(nil);
+  return {
+    "statements": pass1Result["statements"],
+    "symbolTable": pass1Result["symbolTable"],
+    "listingEntries": pass2Result["listingEntries"]
+  };
+}
+
+var cycleSource = "* = $0800\n" +
+                  "  LDA #$00\n" +
+                  "  LDA $10\n" +
+                  "  LDA $10,x\n" +
+                  "  LDA $d000,x\n" +
+                  "  LDA ($10),y\n" +
+                  "  STA $d000,x\n" +
+                  "  ASL A\n" +
+                  "  ASL $10\n" +
+                  "  SLO ($10),y\n" +
+                  "  RTS\n";
+var cycleResult = assemble_with_source(cycleSource, "cycles.a64");
+var cycleStatements = cycleResult["statements"];
+print cycleStatements[1].cycle_text; // expect: 2
+print cycleStatements[2].cycle_text; // expect: 3
+print cycleStatements[3].cycle_text; // expect: 4
+print cycleStatements[4].cycle_text; // expect: 4/5
+print cycleStatements[5].cycle_text; // expect: 5/6
+print cycleStatements[6].cycle_text; // expect: 5
+print cycleStatements[7].cycle_text; // expect: 2
+print cycleStatements[8].cycle_text; // expect: 5
+print cycleStatements[9].cycle_text; // expect: 8
+print cycleStatements[10].cycle_text; // expect: 6
+
+var nearBranch = assemble_with_source(
+    "* = $0800\n  BNE +\n  NOP\n+:\n  RTS\n", "near_branch.a64");
+print nearBranch["statements"][1].cycle_text; // expect: 2/3
+
+var farBranch = assemble_with_source(
+    "* = $08fc\n  BNE +\n  NOP\n  NOP\n+:\n  RTS\n", "far_branch.a64");
+print farBranch["statements"][1].cycle_text; // expect: 2/4
+
+var includePath = "/tmp/slox_c64_test_listing_include.a64";
+File.save(includePath,
+          "include_label:\n" +
+          "  LDA #$11\n" +
+          "  RTS\n");
+
+var mainPath = "/tmp/slox_c64_test_listing_main.a64";
+var mainSource = "* = $0801\n" +
+                 "BORDER = $D020\n" +
+                 ".MACRO SETBORDER color\n" +
+                 "  LDA #color\n" +
+                 "  STA BORDER\n" +
+                 ".ENDMACRO\n" +
+                 "start:\n" +
+                 "  SETBORDER 2\n" +
+                 "  BNE +\n" +
+                 "+:\n" +
+                 "  JMP start\n" +
+                 ".INCLUDE \"" + includePath + "\"\n";
+var mainResult = assemble_with_source(mainSource, mainPath);
+var mainStatements = mainResult["statements"];
+
+var macroSourceCount = 0;
+for (var i = 0; i < mainStatements.length(); i += 1) {
+  var stmt = mainStatements[i];
+  if (stmt.source_file == mainPath and stmt.source_text != nil and
+      stmt.source_text.trim() == "SETBORDER 2") {
+    macroSourceCount = macroSourceCount + 1;
+  }
+}
+print macroSourceCount; // expect: 2
+
+for (var i = 0; i < mainStatements.length(); i += 1) {
+  var stmt = mainStatements[i];
+  if (stmt.source_file == includePath and stmt.name == "LDA") {
+    print "include source: " + stmt.source_text.trim(); // expect: include source: LDA #$11
+  }
+}
+
+var listingPath = "/tmp/slox_c64_test_listing.lst";
+print !!ListingWriter(listingPath).save(
+    mainResult["listingEntries"], mainResult["symbolTable"]); // expect: true
+var listingText = File.load(listingPath);
+print listingText.find("CYCLES") >= 0; // expect: true
+print listingText.find("@ANON") >= 0; // expect: false
+print listingText.find("start") >= 0; // expect: true
+
+var symPath = "/tmp/slox_c64_test_listing.vs";
+print !!SymWriter(symPath).save(mainResult["symbolTable"]); // expect: true
+var symText = File.load(symPath);
+print symText.find("al C:") >= 0; // expect: true
+print symText.find(".start") >= 0; // expect: true
+print symText.find(".BORDER") >= 0; // expect: true
+print symText.find("@ANON") >= 0; // expect: false
+print symText.find("al C:") >= 0 and symText.find(" .\n") >= 0; // expect: false

@@ -1,0 +1,152 @@
+require("mode.lox");
+
+// NMOS 6510 cycle counts. Values with a slash are ranges: the lower value is
+// the no-page-cross case and the higher value includes the extra page-cross
+// cycle. Branches show not-taken/taken, with the taken value including the
+// page-cross cycle when the resolved target crosses a page boundary.
+
+var READ_CYCLES = {
+  AddressingMode.IMMEDIATE:   2,
+  AddressingMode.ZERO_PAGE:   3,
+  AddressingMode.ZERO_PAGE_X: 4,
+  AddressingMode.ZERO_PAGE_Y: 4,
+  AddressingMode.ABSOLUTE:    4,
+  AddressingMode.ABSOLUTE_X:  4,
+  AddressingMode.ABSOLUTE_Y:  4,
+  AddressingMode.IND_X:       6,
+  AddressingMode.IND_Y:       5
+};
+
+var STORE_CYCLES = {
+  AddressingMode.ZERO_PAGE:   3,
+  AddressingMode.ZERO_PAGE_X: 4,
+  AddressingMode.ZERO_PAGE_Y: 4,
+  AddressingMode.ABSOLUTE:    4,
+  AddressingMode.ABSOLUTE_X:  5,
+  AddressingMode.ABSOLUTE_Y:  5,
+  AddressingMode.IND_X:       6,
+  AddressingMode.IND_Y:       6
+};
+
+var RMW_CYCLES = {
+  AddressingMode.ZERO_PAGE:   5,
+  AddressingMode.ZERO_PAGE_X: 6,
+  AddressingMode.ABSOLUTE:    6,
+  AddressingMode.ABSOLUTE_X:  7,
+  AddressingMode.ABSOLUTE_Y:  7
+};
+
+var RMW_ALU_CYCLES = {
+  AddressingMode.ZERO_PAGE:   5,
+  AddressingMode.ZERO_PAGE_X: 6,
+  AddressingMode.ABSOLUTE:    6,
+  AddressingMode.ABSOLUTE_X:  7,
+  AddressingMode.ABSOLUTE_Y:  7,
+  AddressingMode.IND_X:       8,
+  AddressingMode.IND_Y:       8
+};
+
+var SHIFT_CYCLES = {
+  AddressingMode.ACCUMULATOR: 2,
+  AddressingMode.IMPLIED:     2,
+  AddressingMode.ZERO_PAGE:   5,
+  AddressingMode.ZERO_PAGE_X: 6,
+  AddressingMode.ABSOLUTE:    6,
+  AddressingMode.ABSOLUTE_X:  7
+};
+
+var BRANCH_CYCLES = { AddressingMode.RELATIVE: 2 };
+var JUMP_CYCLES = {
+  AddressingMode.ABSOLUTE: 3,
+  AddressingMode.INDIRECT: 5
+};
+var JSR_CYCLES = { AddressingMode.ABSOLUTE: 6 };
+var RTS_CYCLES = { AddressingMode.IMPLIED: 6 };
+var RTI_CYCLES = { AddressingMode.IMPLIED: 6 };
+var BRK_CYCLES = { AddressingMode.IMPLIED: 7 };
+var SIMPLE_CYCLES = {
+  AddressingMode.IMPLIED:     2,
+  AddressingMode.ACCUMULATOR: 2,
+  AddressingMode.IMMEDIATE:   2
+};
+
+var CYCLE_MAPS = {
+  "LDA": READ_CYCLES, "LDX": READ_CYCLES, "LDY": READ_CYCLES,
+  "STA": STORE_CYCLES, "STX": STORE_CYCLES, "STY": STORE_CYCLES,
+  "TAX": SIMPLE_CYCLES, "TAY": SIMPLE_CYCLES, "TXA": SIMPLE_CYCLES,
+  "TYA": SIMPLE_CYCLES, "TSX": SIMPLE_CYCLES, "TXS": SIMPLE_CYCLES,
+  "ADC": READ_CYCLES, "SBC": READ_CYCLES,
+  "AND": READ_CYCLES, "ORA": READ_CYCLES, "EOR": READ_CYCLES,
+  "BIT": READ_CYCLES,
+  "INC": RMW_CYCLES, "DEC": RMW_CYCLES,
+  "INX": SIMPLE_CYCLES, "INY": SIMPLE_CYCLES,
+  "DEX": SIMPLE_CYCLES, "DEY": SIMPLE_CYCLES,
+  "ASL": SHIFT_CYCLES, "LSR": SHIFT_CYCLES,
+  "ROL": SHIFT_CYCLES, "ROR": SHIFT_CYCLES,
+  "CMP": READ_CYCLES, "CPX": READ_CYCLES, "CPY": READ_CYCLES,
+  "BCC": BRANCH_CYCLES, "BCS": BRANCH_CYCLES,
+  "BEQ": BRANCH_CYCLES, "BMI": BRANCH_CYCLES,
+  "BNE": BRANCH_CYCLES, "BPL": BRANCH_CYCLES,
+  "BVC": BRANCH_CYCLES, "BVS": BRANCH_CYCLES,
+  "JMP": JUMP_CYCLES, "JSR": JSR_CYCLES,
+  "RTS": RTS_CYCLES, "RTI": RTI_CYCLES, "BRK": BRK_CYCLES,
+  "PHA": SIMPLE_CYCLES, "PLA": SIMPLE_CYCLES,
+  "PHP": SIMPLE_CYCLES, "PLP": SIMPLE_CYCLES,
+  "CLC": SIMPLE_CYCLES, "SEC": SIMPLE_CYCLES,
+  "CLI": SIMPLE_CYCLES, "SEI": SIMPLE_CYCLES,
+  "CLV": SIMPLE_CYCLES, "CLD": SIMPLE_CYCLES, "SED": SIMPLE_CYCLES,
+  "NOP": SIMPLE_CYCLES,
+  "SLO": RMW_ALU_CYCLES, "ASO": RMW_ALU_CYCLES,
+  "RLA": RMW_ALU_CYCLES,
+  "SRE": RMW_ALU_CYCLES, "LSE": RMW_ALU_CYCLES,
+  "RRA": RMW_ALU_CYCLES,
+  "SAX": STORE_CYCLES,
+  "LAX": READ_CYCLES,
+  "DCP": RMW_ALU_CYCLES, "DCM": RMW_ALU_CYCLES,
+  "ISC": RMW_ALU_CYCLES, "ISB": RMW_ALU_CYCLES, "INS": RMW_ALU_CYCLES,
+  "ALR": SIMPLE_CYCLES, "ARR": SIMPLE_CYCLES,
+  "AXS": SIMPLE_CYCLES, "SBX": SIMPLE_CYCLES
+};
+
+fun base_cycles(mnemonic, mode) {
+  var name = mnemonic.to_upper();
+  var table = CYCLE_MAPS[name];
+  if (table == nil or !table.has(mode)) return nil;
+  return table[mode];
+}
+
+fun is_read_mnemonic(mnemonic) {
+  var name = mnemonic.to_upper();
+  return name == "LDA" or name == "LDX" or name == "LDY" or
+    name == "ADC" or name == "SBC" or name == "AND" or name == "ORA" or
+    name == "EOR" or name == "BIT" or name == "CMP" or name == "CPX" or
+    name == "CPY" or name == "LAX";
+}
+
+fun has_page_cross_option(mnemonic, mode) {
+  if (!is_read_mnemonic(mnemonic)) return false;
+  return mode == AddressingMode.ABSOLUTE_X or
+    mode == AddressingMode.ABSOLUTE_Y or
+    mode == AddressingMode.IND_Y;
+}
+
+fun cycle_text(mnemonic, mode, value, pc) {
+  var base = base_cycles(mnemonic, mode);
+  if (base == nil) return "";
+
+  if (mode == AddressingMode.RELATIVE) {
+    var taken = base + 1;
+    if (value != nil and pc != nil) {
+      var nextPage = ((pc + 2) / 256).floor();
+      var targetPage = (value / 256).floor();
+      if (nextPage != targetPage) taken = taken + 1;
+    }
+    return "" + base + "/" + taken;
+  }
+
+  if (has_page_cross_option(mnemonic, mode)) {
+    return "" + base + "/" + (base + 1);
+  }
+
+  return "" + base;
+}

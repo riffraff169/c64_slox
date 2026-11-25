@@ -11,6 +11,8 @@ class SymWriter {
       var name = keys[i];
       var addr = symbolTable[name];
 
+      if (name == "" or name.slice(0, 1) == "@") continue;
+
       if (isnumber(addr)) {
         var hexAddr = Math.hex(addr, 4, false);
         content = content + "al C:" + hexAddr + " ." + name + "\n";

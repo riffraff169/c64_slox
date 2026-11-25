@@ -35,6 +35,24 @@ Example:
 slox asm.lox -l -s constants.a64
 ```
 
+### Output files
+
+`-l` writes a `.lst` listing with `LINE`, `FILE`, `ADDR`, `CYCLES`,
+`HEX BYTES`, and `SOURCE` columns. Macro-expanded lines point at the invocation
+line and `.INCLUDE` lines point at the included file, so the listed source text
+always matches the line that produced the bytes. Directives and labels have a
+blank `CYCLES` field.
+
+The `CYCLES` column uses NMOS 6510 timings. A single number is a fixed cost.
+`a/b` means the instruction can take either value: branches show
+not-taken/taken with the taken page-cross cycle included when the target is on
+another page, and indexed reads show no-page-cross/page-cross. The symbol table
+at the end of the listing omits internal `@ANON*` labels.
+
+`-s` writes a `.vs` file containing VICE `al C:xxxx .name` commands that can be
+passed with `-moncommands` or loaded with `ll`. Internal `@ANON*` labels and
+empty names are skipped; named labels and constants are exported.
+
 ## Diagnostics
 
 Errors and warnings use a consistent file/line format with the source line and
