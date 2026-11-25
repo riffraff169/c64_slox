@@ -114,12 +114,36 @@ The original notcurses editor is unchanged and remains available through
 - `.RES count[, byte]` - reserve bytes, equivalent to `.FILL`
 - `.INCBIN "file"[, offset[, length]]` / `.INCLUDEBIN ...` - include raw bytes
 - `.INCLUDE "file"` - assemble another source file at this point
+- `.ASSERT condition[, "message"]` - fail assembly when `condition` is `0`
 
 Constants can be declared with `NAME = expr`, `NAME EQU expr`, or
 `NAME .EQU expr`. The program origin is set with `* = $addr`.
 
 Expressions support decimal, `$hex`, `%binary`, current PC (`*`), symbols,
-`<`/`>` byte selectors, and `+`, `-`, and `*`.
+`<`/`>` byte selectors, `+`, `-`, `*`, `%` modulo, and `==` equality. Equality
+returns `1` when both sides match and `0` otherwise.
+
+Pass 1 repeats until symbol addresses and instruction sizes settle, so forward
+references and expressions use zero-page encodings when their final value is at
+most `$FF`. A zero-page operand above `$FF` is an error.
+
+```asm
+* = $0020
+  LDA later       ; emits A5 23 when later lands at $0023
+  RTS
+later:
+```
+
+Use `.ASSERT` to enforce layout rules such as sprite alignment. Put the label
+on its own line after `.ALIGN` so it receives the aligned address:
+
+```asm
+* = $0840
+  .align 64
+sprite_data:
+  .assert sprite_data % 64 == 0, "sprite data must be 64-byte aligned"
+  .fill 64, $00
+```
 
 ## Macros and conditionals
 

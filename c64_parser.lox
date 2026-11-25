@@ -207,11 +207,7 @@ class AssemblyParser {
   }
 
   parseDirectiveArgs(tokens, startIdx) {
-    var raw = "";
-    for (var i = startIdx; i < tokens.length(); i += 1) {
-      raw = raw + this.tokenText(tokens[i]);
-    }
-    return raw.trim();
+    return this.tokensToString(tokens, startIdx, tokens.length()).trim();
   }
 
   parseFilename(tokens, startIdx) {
@@ -292,6 +288,23 @@ class AssemblyParser {
       }
       this.logger?.debug("Parsed Directive: .include " + path);
       return this.processInclude(path, lineNum);
+    }
+
+    if (dirName == ".ASSERT") {
+      var argStr = this.tokensToString(lineTokens, idx, lineTokens.length());
+      var conditionExpr = argStr;
+      var message = nil;
+
+      var commaIdx = argStr.find(",");
+      if (commaIdx >= 0) {
+        conditionExpr = argStr.slice(0, commaIdx).trim();
+        message = argStr.slice(commaIdx + 1).trim();
+      }
+
+      var stmt = Statement("DIRECTIVE", label, dirName, nil, conditionExpr, lineNum);
+      stmt.message = message;
+      this.logger?.debug("Parsed Directive: .assert");
+      return stmt;
     }
 
     if (dirName == ".ALIGN") {

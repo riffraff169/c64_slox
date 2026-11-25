@@ -101,7 +101,15 @@ class AssemblyScanner {
     if (c == ':') return this.addToken(TokenType.COLON, nil);
     if (c == '(') return this.addToken(TokenType.LPAREN, nil);
     if (c == ')') return this.addToken(TokenType.RPAREN, nil);
-    if (c == '=') return this.addToken(TokenType.EQUAL, nil);
+    if (c == '=') {
+      if (this.peek() == '=') {
+        this.advance();
+        this.addToken(TokenType.EQUAL_EQUAL, nil);
+      } else {
+        this.addToken(TokenType.EQUAL, nil);
+      }
+      return;
+    }
     if (c == '*') return this.addToken(TokenType.STAR, nil);
     if (c == '+') return this.addToken(TokenType.PLUS, "+");
     if (c == '-') return this.addToken(TokenType.MINUS, "-");
@@ -121,9 +129,13 @@ class AssemblyScanner {
       return;
     }
 
-    // binary numbers (%00000001)
+    // binary numbers (%00000001) or modulo operator (%)
     if (c == '%') {
-      this.binaryNumber();
+      if (this.peek() == '0' or this.peek() == '1') {
+        this.binaryNumber();
+      } else {
+        this.addToken(TokenType.MODULO, nil);
+      }
       return;
     }
 

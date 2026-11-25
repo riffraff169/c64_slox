@@ -10,6 +10,8 @@ TESTS=(
   test_pass1.lox
   test_assembler.lox
   test_directives.lox
+  test_fixpoint.lox
+  test_assert.lox
   test_textconv.lox
   test_macros.lox
   test_conditionals.lox

@@ -8,9 +8,12 @@ class Pass1 {
     this.symbolTable = {};
     this.currentPC = 0x0801;
     this.hasOrigin = false;
+    this.reportErrors = true;
   }
 
   report(line, message) {
+    if (!this.reportErrors) return;
+
     if (this.diagnostics != nil) {
       this.diagnostics.error(line, message);
       return;
@@ -19,8 +22,21 @@ class Pass1 {
     print "Error on line " + line + ": " + message;
   }
 
-  run() {
+  run(initialSymbols = nil, reportErrors = true) {
     var evaluator = ExpressionEvaluator();
+    this.reportErrors = reportErrors;
+    this.symbolTable = {};
+
+    if (initialSymbols != nil) {
+      var keys = initialSymbols.keys();
+      for (var k = 0; k < keys.length(); k += 1) {
+        this.symbolTable[keys[k]] = initialSymbols[keys[k]];
+      }
+    }
+
+    var definedSymbols = {};
+    this.currentPC = 0x0801;
+    this.hasOrigin = false;
 
     for (var i = 0; i < this.statements.length(); i += 1) {
       var stmt = this.statements[i];
@@ -28,8 +44,9 @@ class Pass1 {
       // 1. constant assigment (eg BORDER_COLOR = $d020)
       if (stmt.type == "CONSTANT") {
         var val = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
-          true, this.diagnostics, stmt.line);
+          false, nil, stmt.line);
         this.symbolTable[stmt.label] = val;
+        definedSymbols[stmt.label] = true;
         stmt.pc = this.currentPC;
         stmt.size = 0;
         continue;
@@ -42,7 +59,7 @@ class Pass1 {
           return;
         }
         var val = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
-          true, this.diagnostics, stmt.line);
+          false, nil, stmt.line);
         this.currentPC = val;
         stmt.pc = val;
         stmt.size = 0;
@@ -52,9 +69,10 @@ class Pass1 {
 
       // 3. address labels
       if (stmt.label and stmt.label != "") {
-        if (this.symbolTable.has(stmt.label)) {
+        if (definedSymbols.has(stmt.label)) {
           this.report(stmt.line, "Duplicate label '" + stmt.label + "'");
         } else {
+          definedSymbols[stmt.label] = true;
           this.symbolTable[stmt.label] = this.currentPC;
         }
       }
@@ -64,6 +82,7 @@ class Pass1 {
 
       // 4. calculate byte size and advance the pc
       if (stmt.type == "INSTRUCTION") {
+        if (stmt.baseMode == nil) stmt.baseMode = stmt.mode;
         var size = this.calculateInstructionSize(stmt);
         stmt.size = size;
         this.currentPC += size;
@@ -77,8 +96,8 @@ class Pass1 {
           this.currentPC += 13;
         } else if (dirName == ".ALIGN") {
           var boundary = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
-            true, this.diagnostics, stmt.line);
-          if (boundary <= 0) boundary = 1;
+            false, nil, stmt.line);
+          boundary = this.valid_alignment(stmt, boundary);
 
           var remainder = this.currentPC % boundary;
           var padding = (remainder == 0) ? 0 : (boundary - remainder);
@@ -88,7 +107,11 @@ class Pass1 {
           this.currentPC += padding;
         } else if (dirName == ".FILL" or dirName == ".RES") {
           var count = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
-            true, this.diagnostics, stmt.line);
+            false, nil, stmt.line);
+          if (count < 0) {
+            this.report(stmt.line, "." + dirName.slice(1).to_upper() + " count must not be negative");
+            count = 0;
+          }
 
           stmt.pc = this.currentPC;
           stmt.size = count;
@@ -99,7 +122,6 @@ class Pass1 {
           this.currentPC += size;
         }
       } else if (stmt.type == "LABEL_ONLY") {
-        this.symbolTable[stmt.name] = this.currentPC;
         stmt.size = 0;
       }
     }
@@ -118,32 +140,55 @@ class Pass1 {
     };
   }
 
-  calculateInstructionSize(stmt) {
-    // zero-page early optimization
-    // if the operand is a literal number <= 255, downgrade ABSOLUTE -> ZERO_PAGE early
-    var val = this.parseOperandValue(stmt.operand);
-    /*
-    print typeof(stmt.operand);
-    print stmt.operand;
-    print val;
-    */
-    if (val != nil and val >= 0 and val <= 255) {
-      if (stmt.mode == AddressingMode.ABSOLUTE and this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE)) {
-        stmt.mode = AddressingMode.ZERO_PAGE;
-        return 2;
-      }
-
-      if (stmt.mode == AddressingMode.ABSOLUTE_X and this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE_X)) {
-        stmt.mode = AddressingMode.ZERO_PAGE_X;
-        return 2;
-      }
-      if (stmt.mode == AddressingMode.ABSOLUTE_Y and this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE_Y)) {
-        stmt.mode = AddressingMode.ZERO_PAGE_Y;
-        return 2;
-      }
+  valid_alignment(stmt, boundary) {
+    if (boundary <= 0) {
+      this.report(stmt.line, ".ALIGN boundary must be positive");
+      return 1;
     }
 
-    var mode = stmt.mode;
+    var check = boundary;
+    while (check > 1) {
+      if (check % 2 != 0) {
+        this.report(stmt.line, ".ALIGN boundary must be a power of two");
+        return 1;
+      }
+      check = (check / 2).floor();
+    }
+    return boundary;
+  }
+
+  calculateInstructionSize(stmt) {
+    var evaluator = ExpressionEvaluator();
+    var mode = stmt.baseMode ?? stmt.mode;
+    stmt.mode = mode;
+
+    if (mode == AddressingMode.ABSOLUTE or
+        mode == AddressingMode.ABSOLUTE_X or
+        mode == AddressingMode.ABSOLUTE_Y) {
+      var val = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
+        false, nil, stmt.line);
+
+      if (val >= 0 and val <= 255) {
+        if (mode == AddressingMode.ABSOLUTE and
+            this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE)) {
+          mode = AddressingMode.ZERO_PAGE;
+          stmt.mode = mode;
+          return 2;
+        }
+        if (mode == AddressingMode.ABSOLUTE_X and
+            this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE_X)) {
+          mode = AddressingMode.ZERO_PAGE_X;
+          stmt.mode = mode;
+          return 2;
+        }
+        if (mode == AddressingMode.ABSOLUTE_Y and
+            this.supportsMode(stmt.name, AddressingMode.ZERO_PAGE_Y)) {
+          mode = AddressingMode.ZERO_PAGE_Y;
+          stmt.mode = mode;
+          return 2;
+        }
+      }
+    }
 
     if (mode == AddressingMode.IMPLIED or mode == AddressingMode.ACCUMULATOR) {
       return 1;
@@ -171,52 +216,6 @@ class Pass1 {
     return this.opcodes[mnemonic].has(mode);
   }
 
-  parseOperandValue(operand) {
-    if (operand == nil) return nil;
-    if (isnumber(operand)) return operand;
-    if (!isstring(operand)) return nil;
-
-    var str = operand;
-    if (this.symbolTable.has(str)) {
-      var symVal = this.symbolTable[str];
-      if (isnumber(symVal)) return symVal;
-    }
-
-    if (str.length() == 0) return nil;
-
-    // hex
-    if (str[0] == '$') {
-      return Math.from_hex(str.slice(1));
-    }
-
-    // 3 binary
-    if (str[0] == '%') {
-      return Math.from_bin(str.slice(1));
-    }
-
-    // 4 low/high byte extractors < >
-    if (str[0] == '<' or str[0] == '>') {
-      var innerVal = this.parseOperandValue(str.slice(1));
-      if (innerVal != nil) {
-        return (str[0] == '<') ? (innerVal % 256) : (innerVal / 256).floor();
-      }
-    }
-
-    // 5 plain decimal string
-    var isDec = true;
-    for (var i = 0; i < str.length(); i += 1) {
-      if (str[i] < '0' or str[i] > '9') {
-        isDec = false;
-        break;
-      }
-    }
-    if (isDec) {
-      return Integer(str);
-    }
-
-    return nil;
-  }
-
   calculateDirectiveSize(stmt) {
     var evaluator = ExpressionEvaluator();
     var name = stmt.name.to_upper();
@@ -233,18 +232,6 @@ class Pass1 {
         name == ".PET" or name == ".SCREEN") {
       return stmt.operand.length();
     }
-    if (name == ".ALIGN") {
-      var boundary = evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
-        true, this.diagnostics, stmt.line);
-      if (boundary <= 0) boundary = 1;
-      var remainder = this.currentPC % boundary;
-      return (remainder == 0) ? 0 : (boundary - remainder);
-    }
-    if (name == ".FILL" or name == ".RES") {
-      return evaluator.evaluate(stmt.operand, this.symbolTable, this.currentPC,
-        true, this.diagnostics, stmt.line);
-    }
-
     if (name == ".INCBIN" or name == ".INCLUDEBIN") {
       var fileContent = File.load(stmt.operand);
       if (fileContent == nil) {
@@ -290,4 +277,52 @@ class Pass1 {
 
     return 0;
   }
+}
+
+fun statement_layout_key(statements) {
+  var key = "";
+  for (var i = 0; i < statements.length(); i += 1) {
+    var stmt = statements[i];
+    key = key + (stmt.pc ?? -1) + ":" + (stmt.size ?? -1) + ":" + (stmt.mode ?? "") + "|";
+  }
+  return key;
+}
+
+fun run_pass1_to_fixpoint(statements, opcodes, diagnostics = nil, verbose = false) {
+  var maxPasses = 16;
+  var previousSymbols = nil;
+  var previousLayout = nil;
+  var result = nil;
+  var converged = false;
+  var passCount = maxPasses;
+
+  for (var pass = 0; pass < maxPasses; pass += 1) {
+    var pass1 = Pass1(statements, opcodes, diagnostics);
+    result = pass1.run(previousSymbols, false);
+    previousSymbols = result["symbolTable"];
+
+    var layout = statement_layout_key(statements);
+    if (verbose) print "  Pass 1 iteration " + (pass + 1) + ": " + layout;
+
+    if (previousLayout != nil and layout == previousLayout) {
+      converged = true;
+      passCount = pass + 1;
+      break;
+    }
+    previousLayout = layout;
+  }
+
+  if (!converged) {
+    var message = "Pass 1 did not converge after " + maxPasses + " iterations";
+    if (diagnostics != nil) {
+      diagnostics.error(nil, message);
+    } else {
+      print "Error: " + message;
+    }
+  }
+
+  var finalPass = Pass1(statements, opcodes, diagnostics);
+  result = finalPass.run(previousSymbols, true);
+  result["passes"] = passCount;
+  return result;
 }

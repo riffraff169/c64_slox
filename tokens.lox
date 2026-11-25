@@ -5,6 +5,8 @@ class TokenType {
   const LPAREN = "LPAREN";
   const RPAREN = "RPAREN";
   const EQUAL = "EQUAL";
+  const EQUAL_EQUAL = "EQUAL_EQUAL";
+  const MODULO = "MODULO";
   const STAR = "STAR";
   const PLUS = "PLUS";
   const MINUS = "MINUS";
