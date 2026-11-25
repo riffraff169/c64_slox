@@ -44,7 +44,7 @@ class AssemblyParser {
         }
       }
     }
-    return statements;
+    return this.resolve_anonymous_labels(statements);
   }
 
   parseLine() {
@@ -89,6 +89,18 @@ class AssemblyParser {
         this.logger?.debug("Parsed CONSTANT: " + valExpr);
         return Statement("CONSTANT", symName, opLexeme, nil, valExpr, lineNum);
       }
+    }
+
+    // 2c. anonymous label definition (+: or -:)
+    if (lineTokens.length() >= 2 and
+        (lineTokens[0].type == TokenType.PLUS or lineTokens[0].type == TokenType.MINUS) and
+        lineTokens[1].type == TokenType.COLON) {
+      if (lineTokens.length() > 2) {
+        this.report(lineNum, "Anonymous labels must be on their own line");
+      }
+      var anonStmt = Statement("LABEL_ONLY", "", "", nil, nil, lineNum);
+      anonStmt.anonymous_marker = lineTokens[0].lexeme;
+      return anonStmt;
     }
 
     // 3. check for label prefix (identifier followed by colon)
@@ -188,7 +200,84 @@ class AssemblyParser {
     var targetExpr = this.tokensToString(lineTokens, idx, lineTokens.length());
     var mode = (this.isBranch(name)) ? AddressingMode.RELATIVE : AddressingMode.ABSOLUTE;
 
-    return Statement(stmtType, label, name, mode, targetExpr, lineNum);
+    var stmt = Statement(stmtType, label, name, mode, targetExpr, lineNum);
+    if (mode == AddressingMode.RELATIVE) {
+      stmt.anonymous_ref = this.anonymous_reference_tokens(lineTokens, idx, lineTokens.length());
+    }
+    return stmt;
+  }
+
+  anonymous_reference_tokens(tokens, start, end) {
+    if (start >= end) return nil;
+
+    var marker = tokens[start].lexeme;
+    if (marker != "+" and marker != "-") return nil;
+
+    for (var i = start; i < end; i += 1) {
+      if (tokens[i].lexeme != marker) return nil;
+    }
+
+    return { "marker": marker, "distance": end - start };
+  }
+
+  resolve_anonymous_labels(statements) {
+    var definitions = { "+": [], "-": [] };
+    var counters = { "+": 0, "-": 0 };
+
+    for (var i = 0; i < statements.length(); i += 1) {
+      var stmt = statements[i];
+      var marker = stmt.anonymous_marker;
+      if (marker == nil) continue;
+
+      var n = counters[marker] + 1;
+      counters[marker] = n;
+
+      var prefix = (marker == "+") ? "@ANONP" : "@ANONM";
+      var name = prefix + n;
+      stmt.label = name;
+      definitions[marker].push({ "index": i, "name": name });
+    }
+
+    for (var i = 0; i < statements.length(); i += 1) {
+      var stmt = statements[i];
+      var ref = stmt.anonymous_ref;
+      if (ref == nil) continue;
+
+      var marker = ref["marker"];
+      var distance = ref["distance"];
+      var defs = definitions[marker];
+      var found = 0;
+      var target = nil;
+
+      if (marker == "+") {
+        for (var d = 0; d < defs.length(); d += 1) {
+          if (defs[d]["index"] <= i) continue;
+          found += 1;
+          if (found == distance) {
+            target = defs[d]["name"];
+            break;
+          }
+        }
+      } else {
+        for (var d = defs.length() - 1; d >= 0; d -= 1) {
+          if (defs[d]["index"] >= i) continue;
+          found += 1;
+          if (found == distance) {
+            target = defs[d]["name"];
+            break;
+          }
+        }
+      }
+
+      if (target == nil) {
+        this.report(stmt.line, "No matching '" + marker + "' anonymous label");
+        stmt.operand = nil;
+      } else {
+        stmt.operand = target;
+      }
+    }
+
+    return statements;
   }
 
   tokenText(token) {

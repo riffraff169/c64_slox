@@ -22,6 +22,8 @@ class Statement {
     this.mode = mode;   // AddressingMode constant
     this.baseMode = mode; // parser-selected mode, kept across fixpoint passes
     this.force_absolute = false; // set when ZP selection would oscillate
+    this.anonymous_marker = nil; // "+" or "-" for anonymous label definitions
+    this.anonymous_ref = nil; // { marker, distance } for branch operands
     this.operand = operand; // raw expression / value / symbol
     this.line = line;
   }
