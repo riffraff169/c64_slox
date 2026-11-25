@@ -23,6 +23,9 @@ class D64Writer {
     this.allocTrack = 1;
     this.allocSector = 0;
 
+    // track 18 directory sector fill order (interleave 3)
+    this.dirSectorOrder = [1, 4, 7, 10, 13, 16, 2, 5, 8, 11, 14, 17, 3, 6, 9, 12, 15, 18];
+
     this.formatDisk();
   }
 
@@ -44,15 +47,19 @@ class D64Writer {
     this.data[bamOffset + 1] = 1;
     this.data[bamOffset + 2] = 'A';
 
-    // mark all sectors on tracks 1-35 as free in BAM
+    // mark only real sectors as free in BAM; unused bits are allocated
     for (var t = 1; t <= 35; t += 1) {
       var entryOff = bamOffset + 4 + (t - 1) * 4;
       var numSectors = this.getMaxSectors(t);
 
       this.data[entryOff] = numSectors; // free count
-      this.data[entryOff + 1] = 255;    // bits 0-7
-      this.data[entryOff + 2] = 255;    // bits 8-15
-      this.data[entryOff + 3] = 255;    // bits 16-23
+      for (var b = 0; b < 3; b += 1) {
+        this.data[entryOff + 1 + b] = 0;
+      }
+      for (var s = 0; s < numSectors; s += 1) {
+        var byteIdx = (s / 8).floor();
+        this.data[entryOff + 1 + byteIdx] = this.data[entryOff + 1 + byteIdx] + 2 ** (s % 8);
+      }
     }
 
     // write disk header name & id ($a0 padded)
@@ -67,6 +74,9 @@ class D64Writer {
     this.data[bamOffset + 164] = 160;
     this.data[bamOffset + 165] = '2';
     this.data[bamOffset + 166] = 'A';
+    for (var i = 167; i <= 170; i += 1) {
+      this.data[bamOffset + i] = 160;
+    }
 
     // reserve track 18 sector 0 and sector 1
     this.allocateSpecificSector(18, 0);
@@ -235,9 +245,19 @@ class D64Writer {
   allocateNextDirectorySector() {
     var bamOffset = this.getSectorOffset(18, 0);
     var entryOff = bamOffset + 4 + (18 - 1) * 4;
+    var order = this.dirSectorOrder;
 
-    for (var s = 1; s < 19; s += 1) {
-      var bytIdx = (s / 8).floor();
+    var currentIdx = 0;
+    for (var i = 0; i < order.length(); i += 1) {
+      if (order[i] == this.currDirSector) {
+        currentIdx = i;
+        break;
+      }
+    }
+
+    for (var n = 1; n <= order.length(); n += 1) {
+      var s = order[(currentIdx + n) % order.length()];
+      var byteIdx = (s / 8).floor();
       var bitIdx = s % 8;
       var byteVal = this.data[entryOff + 1 + byteIdx];
       var mask = 2 ** bitIdx;
@@ -254,57 +274,6 @@ class D64Writer {
 
   save(filepath) {
     return File.save(filepath, this.data.to_string());
-  }
-
-  formatBAM() {
-    var bamOffset = this.getSectorOffset(18,0);
-    
-    // pointer to first directory sector (track 18, sector 1)
-    this.data[bamOffset + 0] = 18;
-    this.data[bamOffset + 1] = 1;
-    this.data[bamOffset + 2] = 65; // 'A' (dos version)
-
-    // disk name (16 bytes at offset 144, padded with $a0)
-    for (var i = 0; i < 16; i += 1) {
-      if (i < this.diskName.length()) {
-        this.data[bamOffset + 144 + i] = this.diskName[i];
-      } else {
-        this.data[bamOffset + 144 + i] = 160; // $a0 shift space
-      }
-    }
-
-    // disk id (2 bytes at offset 162)
-    this.data[bamOffset + 162] = this.diskId[0];
-    this.data[bamOffset + 163] = this.diskId[1];
-    this.data[bamOffset + 164] = 160; // $a0
-    this.data[bamOffset + 165] = 50; // '2'
-    this.data[bamOffset + 166] = 65; // 'A'
-  }
-
-  writeDirectoryEntry(filename, startTrack, startSector, blocksUsed) {
-    var dirOffset = this.getSectorOffset(18, 1);
-
-    // link pointer (0, $ff indicates last directory sector)
-    this.data[dirOffset + 0] = 0;
-    this.data[dirOffset + 1] = 255;
-
-    // first entry slot (offset + 2)
-    this.data[dirOffset + 2] = 130; // $82 = closed prg file type
-    this.data[dirOffset + 3] = startTrack;
-    this.data[dirOffset + 4] = startSector;
-
-    // filename (16 bytes padded with $a0)
-    for (var i = 0; i < 16; i += 1) {
-      if (i < filename.length()) {
-        this.data[dirOffset + 5 + i] = filename[i];
-      } else {
-        this.data[dirOffset + 5 + i] = 160;
-      }
-    }
-
-    // size in blocks (16 bit little endian)
-    this.data[dirOffset + 30] = blocksUsed % 266;
-    this.data[dirOffset + 31] = (blocksUsed / 256).floor() % 256;
   }
 }
 
