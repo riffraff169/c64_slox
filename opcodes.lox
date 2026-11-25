@@ -7,6 +7,82 @@ class Opcode {
   }
 }
 
+var SLO_MODES = {
+  AddressingMode.ZERO_PAGE:   Opcode(0x07, 2),
+  AddressingMode.ZERO_PAGE_X: Opcode(0x17, 2),
+  AddressingMode.IND_X:       Opcode(0x03, 2),
+  AddressingMode.IND_Y:       Opcode(0x13, 2),
+  AddressingMode.ABSOLUTE:    Opcode(0x0F, 3),
+  AddressingMode.ABSOLUTE_X:  Opcode(0x1F, 3),
+  AddressingMode.ABSOLUTE_Y:  Opcode(0x1B, 3)
+};
+
+var RLA_MODES = {
+  AddressingMode.ZERO_PAGE:   Opcode(0x27, 2),
+  AddressingMode.ZERO_PAGE_X: Opcode(0x37, 2),
+  AddressingMode.IND_X:       Opcode(0x23, 2),
+  AddressingMode.IND_Y:       Opcode(0x33, 2),
+  AddressingMode.ABSOLUTE:    Opcode(0x2F, 3),
+  AddressingMode.ABSOLUTE_X:  Opcode(0x3F, 3),
+  AddressingMode.ABSOLUTE_Y:  Opcode(0x3B, 3)
+};
+
+var SRE_MODES = {
+  AddressingMode.ZERO_PAGE:   Opcode(0x47, 2),
+  AddressingMode.ZERO_PAGE_X: Opcode(0x57, 2),
+  AddressingMode.IND_X:       Opcode(0x43, 2),
+  AddressingMode.IND_Y:       Opcode(0x53, 2),
+  AddressingMode.ABSOLUTE:    Opcode(0x4F, 3),
+  AddressingMode.ABSOLUTE_X:  Opcode(0x5F, 3),
+  AddressingMode.ABSOLUTE_Y:  Opcode(0x5B, 3)
+};
+
+var RRA_MODES = {
+  AddressingMode.ZERO_PAGE:   Opcode(0x67, 2),
+  AddressingMode.ZERO_PAGE_X: Opcode(0x77, 2),
+  AddressingMode.IND_X:       Opcode(0x63, 2),
+  AddressingMode.IND_Y:       Opcode(0x73, 2),
+  AddressingMode.ABSOLUTE:    Opcode(0x6F, 3),
+  AddressingMode.ABSOLUTE_X:  Opcode(0x7F, 3),
+  AddressingMode.ABSOLUTE_Y:  Opcode(0x7B, 3)
+};
+
+var SAX_MODES = {
+  AddressingMode.ZERO_PAGE:   Opcode(0x87, 2),
+  AddressingMode.ZERO_PAGE_Y: Opcode(0x97, 2),
+  AddressingMode.IND_X:       Opcode(0x83, 2),
+  AddressingMode.ABSOLUTE:    Opcode(0x8F, 3)
+};
+
+var LAX_MODES = {
+  AddressingMode.ZERO_PAGE:   Opcode(0xA7, 2),
+  AddressingMode.ZERO_PAGE_Y: Opcode(0xB7, 2),
+  AddressingMode.IND_X:       Opcode(0xA3, 2),
+  AddressingMode.IND_Y:       Opcode(0xB3, 2),
+  AddressingMode.ABSOLUTE:    Opcode(0xAF, 3),
+  AddressingMode.ABSOLUTE_Y:  Opcode(0xBF, 3)
+};
+
+var DCP_MODES = {
+  AddressingMode.ZERO_PAGE:   Opcode(0xC7, 2),
+  AddressingMode.ZERO_PAGE_X: Opcode(0xD7, 2),
+  AddressingMode.IND_X:       Opcode(0xC3, 2),
+  AddressingMode.IND_Y:       Opcode(0xD3, 2),
+  AddressingMode.ABSOLUTE:    Opcode(0xCF, 3),
+  AddressingMode.ABSOLUTE_X:  Opcode(0xDF, 3),
+  AddressingMode.ABSOLUTE_Y:  Opcode(0xDB, 3)
+};
+
+var ISC_MODES = {
+  AddressingMode.ZERO_PAGE:   Opcode(0xE7, 2),
+  AddressingMode.ZERO_PAGE_X: Opcode(0xF7, 2),
+  AddressingMode.IND_X:       Opcode(0xE3, 2),
+  AddressingMode.IND_Y:       Opcode(0xF3, 2),
+  AddressingMode.ABSOLUTE:    Opcode(0xEF, 3),
+  AddressingMode.ABSOLUTE_X:  Opcode(0xFF, 3),
+  AddressingMode.ABSOLUTE_Y:  Opcode(0xFB, 3)
+};
+
 var OPCODES = {
   // load
   "LDA": {
@@ -230,5 +306,24 @@ var OPCODES = {
   "CLD": { AddressingMode.IMPLIED: Opcode(0xD8, 1) },
   "SED": { AddressingMode.IMPLIED: Opcode(0xF8, 1) },
   "BRK": { AddressingMode.IMPLIED: Opcode(0x00, 1) },
-  "NOP": { AddressingMode.IMPLIED:  Opcode(0xEA, 1) }
+  "NOP": { AddressingMode.IMPLIED:  Opcode(0xEA, 1) },
+
+  // --- Stable undocumented 6510 opcodes ---
+  "SLO": SLO_MODES,
+  "ASO": SLO_MODES,
+  "RLA": RLA_MODES,
+  "SRE": SRE_MODES,
+  "LSE": SRE_MODES,
+  "RRA": RRA_MODES,
+  "SAX": SAX_MODES,
+  "LAX": LAX_MODES,
+  "DCP": DCP_MODES,
+  "DCM": DCP_MODES,
+  "ISC": ISC_MODES,
+  "ISB": ISC_MODES,
+  "INS": ISC_MODES,
+  "ALR": { AddressingMode.IMMEDIATE: Opcode(0x4B, 2) },
+  "ARR": { AddressingMode.IMMEDIATE: Opcode(0x6B, 2) },
+  "AXS": { AddressingMode.IMMEDIATE: Opcode(0xCB, 2) },
+  "SBX": { AddressingMode.IMMEDIATE: Opcode(0xCB, 2) }
 };

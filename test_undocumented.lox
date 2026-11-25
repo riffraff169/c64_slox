@@ -1,0 +1,114 @@
+require("scanner.lox");
+require("c64_parser.lox");
+require("opcodes.lox");
+require("pass1.lox");
+require("pass2.lox");
+
+fun assemble_hex(source) {
+  var tokens = AssemblyScanner(source).scanTokens();
+  var statements = AssemblyParser(tokens).parse();
+  var pass1Result = run_pass1_to_fixpoint(statements, OPCODES);
+  var pass2Result = Pass2(
+      pass1Result["statements"],
+      pass1Result["symbolTable"],
+      OPCODES,
+      pass1Result["startAddress"]
+  ).run(nil);
+
+  var bytes = pass2Result["bytes"];
+  var hexString = "";
+  for (var i = 0; i < bytes.length(); i += 1) {
+    if (i > 0) hexString = hexString + " ";
+    hexString = hexString + Math.hex(bytes[i], 2, false).to_upper();
+  }
+  return hexString;
+}
+
+var shiftSources = [
+  "* = $0801\n" +
+    "  SLO $10\n" +
+    "  SLO $10,x\n" +
+    "  SLO ($10,x)\n" +
+    "  SLO ($10),y\n" +
+    "  SLO $0400\n" +
+    "  SLO $0400,x\n" +
+    "  SLO $0400,y\n",
+  "* = $0801\n" +
+    "  RLA $10\n" +
+    "  RLA $10,x\n" +
+    "  RLA ($10,x)\n" +
+    "  RLA ($10),y\n" +
+    "  RLA $0400\n" +
+    "  RLA $0400,x\n" +
+    "  RLA $0400,y\n",
+  "* = $0801\n" +
+    "  SRE $10\n" +
+    "  SRE $10,x\n" +
+    "  SRE ($10,x)\n" +
+    "  SRE ($10),y\n" +
+    "  SRE $0400\n" +
+    "  SRE $0400,x\n" +
+    "  SRE $0400,y\n",
+  "* = $0801\n" +
+    "  RRA $10\n" +
+    "  RRA $10,x\n" +
+    "  RRA ($10,x)\n" +
+    "  RRA ($10),y\n" +
+    "  RRA $0400\n" +
+    "  RRA $0400,x\n" +
+    "  RRA $0400,y\n"
+];
+
+for (var i = 0; i < shiftSources.length(); i += 1) {
+  print assemble_hex(shiftSources[i]);
+}
+
+// expect: 07 10 17 10 03 10 13 10 0F 00 04 1F 00 04 1B 00 04
+// expect: 27 10 37 10 23 10 33 10 2F 00 04 3F 00 04 3B 00 04
+// expect: 47 10 57 10 43 10 53 10 4F 00 04 5F 00 04 5B 00 04
+// expect: 67 10 77 10 63 10 73 10 6F 00 04 7F 00 04 7B 00 04
+
+var transferSource = "* = $0801\n" +
+                     "  SAX $10\n" +
+                     "  SAX $10,y\n" +
+                     "  SAX ($10,x)\n" +
+                     "  SAX $0400\n" +
+                     "  LAX $10\n" +
+                     "  LAX $10,y\n" +
+                     "  LAX ($10,x)\n" +
+                     "  LAX ($10),y\n" +
+                     "  LAX $0400\n" +
+                     "  LAX $0400,y\n";
+print assemble_hex(transferSource);
+// expect: 87 10 97 10 83 10 8F 00 04 A7 10 B7 10 A3 10 B3 10 AF 00 04 BF 00 04
+
+var rmwSource = "* = $0801\n" +
+                "  DCP $10\n" +
+                "  DCP $10,x\n" +
+                "  DCP ($10,x)\n" +
+                "  DCP ($10),y\n" +
+                "  DCP $0400\n" +
+                "  DCP $0400,x\n" +
+                "  DCP $0400,y\n" +
+                "  ISC $10\n" +
+                "  ISC $10,x\n" +
+                "  ISC ($10,x)\n" +
+                "  ISC ($10),y\n" +
+                "  ISC $0400\n" +
+                "  ISC $0400,x\n" +
+                "  ISC $0400,y\n";
+print assemble_hex(rmwSource);
+// expect: C7 10 D7 10 C3 10 D3 10 CF 00 04 DF 00 04 DB 00 04 E7 10 F7 10 E3 10 F3 10 EF 00 04 FF 00 04 FB 00 04
+
+var extraSource = "* = $0801\n" +
+                  "  ALR #$03\n" +
+                  "  ARR #$03\n" +
+                  "  AXS #$03\n" +
+                  "  SBX #$03\n" +
+                  "  ASO $10\n" +
+                  "  LSE $10\n" +
+                  "  DCM $10\n" +
+                  "  ISB $10\n" +
+                  "  INS $10\n";
+print assemble_hex(extraSource);
+// expect: 4B 03 6B 03 CB 03 CB 03 07 10 47 10 C7 10 E7 10 E7 10

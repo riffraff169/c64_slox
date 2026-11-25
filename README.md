@@ -145,6 +145,40 @@ sprite_data:
   .fill 64, $00
 ```
 
+## Undocumented 6510 opcodes
+
+The assembler accepts these stable undocumented NMOS 6510 mnemonics. They are
+not part of the documented 6502 instruction set, so use them only when targeting
+a compatible CPU. Behavior on CMOS 8500/8502 revisions is outside the scope of
+this support. Unstable instructions such as `XAA`, `OAL`, `AHX`, `SHY`, `SHX`,
+`TAS`, and `LAS` are intentionally not supported.
+
+| Mnemonic | Aliases | Operation |
+| --- | --- | --- |
+| `SLO` | `ASO` | ASL memory, then ORA with A |
+| `RLA` | | ROL memory, then AND with A |
+| `SRE` | `LSE` | LSR memory, then EOR with A |
+| `RRA` | | ROR memory, then ADC with A |
+| `SAX` | | Store A AND X |
+| `LAX` | | Load A and X together |
+| `DCP` | `DCM` | DEC memory, then CMP with A |
+| `ISC` | `ISB`, `INS` | INC memory, then SBC with A |
+| `ALR` | | AND immediate, then LSR A |
+| `ARR` | | AND immediate, then ROR A |
+| `AXS` | `SBX` | X := A AND X minus immediate |
+
+Every addressing mode that the CPU defines for a mnemonic is accepted, and the
+same zero-page fixpoint rules apply. For example:
+
+```asm
+  SLO $10        ; 07 10
+  SLO $0400,x    ; 1F 00 04
+  LAX ($10),y    ; B3 10
+  SAX $10,y      ; 97 10
+  DCM $10        ; C7 10
+  AXS #$03       ; CB 03
+```
+
 ## Macros and conditionals
 
 A line-oriented preprocessor runs before the parser. Macros are defined with
